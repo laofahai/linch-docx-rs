@@ -1,6 +1,6 @@
 [package]
 name = "linch-docx-rs"
-version = "0.0.1-alpha.1"
+version = "0.0.1-alpha.2"
 edition = "2021"
 authors = ["laofahai"]
 description = "A reliable DOCX reading and writing library for Rust with round-trip preservation"
