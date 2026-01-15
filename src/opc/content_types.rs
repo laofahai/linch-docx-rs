@@ -178,6 +178,10 @@ pub const RELATIONSHIPS: &str = "application/vnd.openxmlformats-package.relation
 pub const XML: &str = "application/xml";
 pub const MAIN_DOCUMENT: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
+pub const NUMBERING: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml";
+pub const STYLES: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml";
 
 #[cfg(test)]
 mod tests {

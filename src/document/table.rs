@@ -72,6 +72,55 @@ pub enum VMerge {
 }
 
 impl Table {
+    /// Create a new table with the specified number of rows and columns
+    pub fn new(rows: usize, cols: usize) -> Self {
+        let mut table_rows = Vec::with_capacity(rows);
+        for _ in 0..rows {
+            let mut cells = Vec::with_capacity(cols);
+            for _ in 0..cols {
+                cells.push(TableCell::new(""));
+            }
+            table_rows.push(TableRow {
+                cells,
+                ..Default::default()
+            });
+        }
+
+        let grid = (0..cols).map(|_| GridColumn { width: None }).collect();
+
+        Table {
+            grid,
+            rows: table_rows,
+            ..Default::default()
+        }
+    }
+
+    /// Create a table from a 2D array of strings
+    pub fn from_data<S: Into<String> + Clone>(data: &[&[S]]) -> Self {
+        let rows: Vec<TableRow> = data
+            .iter()
+            .map(|row| {
+                let cells: Vec<TableCell> = row
+                    .iter()
+                    .map(|text| TableCell::new(text.clone()))
+                    .collect();
+                TableRow {
+                    cells,
+                    ..Default::default()
+                }
+            })
+            .collect();
+
+        let cols = data.first().map(|r| r.len()).unwrap_or(0);
+        let grid = (0..cols).map(|_| GridColumn { width: None }).collect();
+
+        Table {
+            grid,
+            rows,
+            ..Default::default()
+        }
+    }
+
     /// Parse from reader (after w:tbl start tag)
     pub fn from_reader<R: BufRead>(reader: &mut Reader<R>, _start: &BytesStart) -> Result<Self> {
         let mut table = Table::default();
@@ -153,6 +202,35 @@ impl Table {
         self.rows.iter()
     }
 
+    /// Get mutable cell at position
+    pub fn cell_mut(&mut self, row: usize, col: usize) -> Option<&mut TableCell> {
+        self.rows.get_mut(row)?.cells.get_mut(col)
+    }
+
+    /// Get mutable row
+    pub fn row_mut(&mut self, index: usize) -> Option<&mut TableRow> {
+        self.rows.get_mut(index)
+    }
+
+    /// Add a row to the table
+    pub fn add_row(&mut self, row: TableRow) {
+        self.rows.push(row);
+    }
+
+    /// Set cell text at position
+    pub fn set_cell_text(&mut self, row: usize, col: usize, text: impl Into<String>) {
+        if let Some(cell) = self.cell_mut(row, col) {
+            cell.set_text(text);
+        }
+    }
+
+    /// Set column width (in twips, 1/20 of a point)
+    pub fn set_column_width(&mut self, col: usize, width: i32) {
+        if col < self.grid.len() {
+            self.grid[col].width = Some(width);
+        }
+    }
+
     /// Write to XML writer
     pub fn write_to<W: std::io::Write>(&self, writer: &mut Writer<W>) -> Result<()> {
         writer.write_event(Event::Start(BytesStart::new("w:tbl")))?;
@@ -191,6 +269,24 @@ impl Table {
 }
 
 impl TableRow {
+    /// Create a new row with empty cells
+    pub fn new(cell_count: usize) -> Self {
+        let cells = (0..cell_count).map(|_| TableCell::new("")).collect();
+        TableRow {
+            cells,
+            ..Default::default()
+        }
+    }
+
+    /// Create a row from cell texts
+    pub fn from_texts<S: Into<String>>(texts: impl IntoIterator<Item = S>) -> Self {
+        let cells = texts.into_iter().map(TableCell::new).collect();
+        TableRow {
+            cells,
+            ..Default::default()
+        }
+    }
+
     /// Parse from reader
     pub fn from_reader<R: BufRead>(reader: &mut Reader<R>, _start: &BytesStart) -> Result<Self> {
         let mut row = TableRow::default();
@@ -258,6 +354,16 @@ impl TableRow {
         self.cells.iter()
     }
 
+    /// Get mutable cell at index
+    pub fn cell_mut(&mut self, index: usize) -> Option<&mut TableCell> {
+        self.cells.get_mut(index)
+    }
+
+    /// Add a cell to the row
+    pub fn add_cell(&mut self, cell: TableCell) {
+        self.cells.push(cell);
+    }
+
     /// Write to XML writer
     pub fn write_to<W: std::io::Write>(&self, writer: &mut Writer<W>) -> Result<()> {
         writer.write_event(Event::Start(BytesStart::new("w:tr")))?;
@@ -283,6 +389,53 @@ impl TableRow {
 }
 
 impl TableCell {
+    /// Create a new cell with text
+    pub fn new(text: impl Into<String>) -> Self {
+        let text = text.into();
+        let paragraphs = if text.is_empty() {
+            vec![Paragraph::default()]
+        } else {
+            vec![Paragraph::new(text)]
+        };
+        TableCell {
+            paragraphs,
+            ..Default::default()
+        }
+    }
+
+    /// Set the cell text (replaces all paragraphs with a single one)
+    pub fn set_text(&mut self, text: impl Into<String>) {
+        self.paragraphs.clear();
+        self.paragraphs.push(Paragraph::new(text));
+    }
+
+    /// Add a paragraph to the cell
+    pub fn add_paragraph(&mut self, para: Paragraph) {
+        self.paragraphs.push(para);
+    }
+
+    /// Set cell width (in twips)
+    pub fn set_width(&mut self, width: i32) {
+        self.properties.get_or_insert_with(Default::default).width = Some(width);
+    }
+
+    /// Set horizontal merge (grid span)
+    pub fn set_grid_span(&mut self, span: u32) {
+        self.properties
+            .get_or_insert_with(Default::default)
+            .grid_span = Some(span);
+    }
+
+    /// Set vertical merge
+    pub fn set_v_merge(&mut self, v_merge: VMerge) {
+        self.properties.get_or_insert_with(Default::default).v_merge = Some(v_merge);
+    }
+
+    /// Set vertical alignment
+    pub fn set_v_align(&mut self, align: impl Into<String>) {
+        self.properties.get_or_insert_with(Default::default).v_align = Some(align.into());
+    }
+
     /// Parse from reader
     pub fn from_reader<R: BufRead>(reader: &mut Reader<R>, _start: &BytesStart) -> Result<Self> {
         let mut cell = TableCell::default();
