@@ -199,3 +199,69 @@ fn test_save_to_file() {
     // Clean up
     std::fs::remove_file(output_path).ok();
 }
+
+#[test]
+fn test_create_table() {
+    let mut doc = Document::new();
+    doc.add_paragraph("Document with Table");
+
+    // Create a 3x3 table
+    let table = doc.add_table_with_size(3, 3);
+
+    // Set cell content
+    table.set_cell_text(0, 0, "Header 1");
+    table.set_cell_text(0, 1, "Header 2");
+    table.set_cell_text(0, 2, "Header 3");
+    table.set_cell_text(1, 0, "Row 1, Col 1");
+    table.set_cell_text(1, 1, "Row 1, Col 2");
+    table.set_cell_text(1, 2, "Row 1, Col 3");
+    table.set_cell_text(2, 0, "Row 2, Col 1");
+    table.set_cell_text(2, 1, "Row 2, Col 2");
+    table.set_cell_text(2, 2, "Row 2, Col 3");
+
+    // Verify table structure
+    assert_eq!(doc.table_count(), 1);
+    let t = doc.table(0).unwrap();
+    assert_eq!(t.row_count(), 3);
+    assert_eq!(t.column_count(), 3);
+
+    // Save and reload
+    let bytes = doc.to_bytes().expect("Should serialize");
+    let doc2 = Document::from_bytes(&bytes).expect("Should deserialize");
+
+    // Verify table is preserved
+    assert_eq!(doc2.table_count(), 1);
+    let t2 = doc2.table(0).unwrap();
+    assert_eq!(t2.row_count(), 3);
+    assert_eq!(t2.cell(0, 0).unwrap().text(), "Header 1");
+    assert_eq!(t2.cell(1, 1).unwrap().text(), "Row 1, Col 2");
+    assert_eq!(t2.cell(2, 2).unwrap().text(), "Row 2, Col 3");
+}
+
+#[test]
+fn test_table_from_data() {
+    use linch_docx_rs::Table;
+
+    let mut doc = Document::new();
+
+    // Create table from 2D data
+    let data: &[&[&str]] = &[
+        &["Name", "Age", "City"],
+        &["Alice", "30", "New York"],
+        &["Bob", "25", "Los Angeles"],
+    ];
+
+    let table = Table::from_data(data);
+    doc.add_table(table);
+
+    assert_eq!(doc.table_count(), 1);
+    let t = doc.table(0).unwrap();
+    assert_eq!(t.cell(0, 0).unwrap().text(), "Name");
+    assert_eq!(t.cell(1, 0).unwrap().text(), "Alice");
+    assert_eq!(t.cell(2, 2).unwrap().text(), "Los Angeles");
+
+    // Save and verify round-trip
+    let bytes = doc.to_bytes().expect("Should serialize");
+    let doc2 = Document::from_bytes(&bytes).expect("Should deserialize");
+    assert_eq!(doc2.table(0).unwrap().cell(1, 1).unwrap().text(), "30");
+}

@@ -1,11 +1,13 @@
 //! Document model - high-level API for DOCX documents
 
 mod body;
+mod numbering;
 mod paragraph;
 mod run;
 mod table;
 
 pub use body::{BlockContent, Body};
+pub use numbering::{AbstractNum, Level, LevelOverride, Num, NumberFormat, Numbering};
 pub use paragraph::{Hyperlink, Paragraph, ParagraphContent, ParagraphProperties};
 pub use run::{BreakType, Run, RunContent, RunProperties};
 pub use table::{GridColumn, Table, TableCell, TableCellProperties, TableRow, VMerge};
@@ -25,6 +27,8 @@ pub struct Document {
     package: Package,
     /// Parsed document body
     body: Body,
+    /// Numbering definitions (from numbering.xml)
+    numbering: Option<Numbering>,
 }
 
 impl Document {
@@ -51,7 +55,37 @@ impl Document {
         let xml = doc_part.data_as_str()?;
         let body = parse_document_xml(xml)?;
 
-        Ok(Self { package, body })
+        // Try to load numbering.xml
+        let numbering = Self::load_numbering(&package);
+
+        Ok(Self {
+            package,
+            body,
+            numbering,
+        })
+    }
+
+    /// Load numbering definitions from the package
+    fn load_numbering(package: &Package) -> Option<Numbering> {
+        // First find the numbering part through relationships
+        let doc_part = package.main_document_part()?;
+        let rels = doc_part.relationships()?;
+        let numbering_rel = rels.by_type(crate::opc::rel_types::NUMBERING)?;
+
+        // Resolve the target URI
+        let target = &numbering_rel.target;
+        let numbering_uri = if target.starts_with('/') {
+            PartUri::new(target).ok()?
+        } else {
+            PartUri::new(&format!("/word/{}", target)).ok()?
+        };
+
+        // Get the numbering part
+        let numbering_part = package.part(&numbering_uri)?;
+        let xml = numbering_part.data_as_str().ok()?;
+
+        // Parse numbering.xml
+        Numbering::from_xml(xml).ok()
     }
 
     /// Create a new empty document
@@ -59,6 +93,7 @@ impl Document {
         Self {
             package: Package::new(),
             body: Body::default(),
+            numbering: None,
         }
     }
 
@@ -92,6 +127,18 @@ impl Document {
             use crate::opc::rel_types;
             self.package
                 .add_relationship(rel_types::OFFICE_DOCUMENT, uri.as_str());
+        }
+
+        // Update numbering.xml if present
+        if let Some(ref numbering) = self.numbering {
+            let numbering_xml = numbering.to_xml()?;
+            let numbering_uri = PartUri::new("/word/numbering.xml")?;
+            let numbering_part = Part::new(
+                numbering_uri,
+                crate::opc::NUMBERING.to_string(),
+                numbering_xml.into_bytes(),
+            );
+            self.package.add_part(numbering_part);
         }
 
         Ok(())
@@ -188,6 +235,88 @@ impl Document {
                 }
             })
             .expect("Just added paragraph")
+    }
+
+    /// Get numbering definitions
+    pub fn numbering(&self) -> Option<&Numbering> {
+        self.numbering.as_ref()
+    }
+
+    /// Get mutable numbering definitions
+    pub fn numbering_mut(&mut self) -> Option<&mut Numbering> {
+        self.numbering.as_mut()
+    }
+
+    /// Check if a paragraph is a list item
+    pub fn is_list_item(&self, para: &Paragraph) -> bool {
+        para.properties.as_ref().and_then(|p| p.num_id).is_some()
+    }
+
+    /// Check if a paragraph is a bullet list item
+    pub fn is_bullet_list_item(&self, para: &Paragraph) -> bool {
+        if let Some(num_id) = para.properties.as_ref().and_then(|p| p.num_id) {
+            if let Some(ref numbering) = self.numbering {
+                return numbering.is_bullet_list(num_id);
+            }
+        }
+        false
+    }
+
+    /// Get the list level of a paragraph (0-8), or None if not a list item
+    pub fn list_level(&self, para: &Paragraph) -> Option<u32> {
+        para.properties.as_ref().and_then(|p| {
+            if p.num_id.is_some() {
+                Some(p.num_level.unwrap_or(0))
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Get the number format for a list item
+    pub fn list_format(&self, para: &Paragraph) -> Option<&NumberFormat> {
+        let props = para.properties.as_ref()?;
+        let num_id = props.num_id?;
+        let level = props.num_level.unwrap_or(0) as u8;
+        self.numbering.as_ref()?.get_format(num_id, level)
+    }
+
+    /// Add a table to the document
+    pub fn add_table(&mut self, table: Table) -> &mut Table {
+        self.body.add_table(table);
+        // Return mutable reference to the last table
+        self.body
+            .content
+            .iter_mut()
+            .rev()
+            .find_map(|c| {
+                if let BlockContent::Table(t) = c {
+                    Some(t)
+                } else {
+                    None
+                }
+            })
+            .expect("Just added table")
+    }
+
+    /// Create and add a table with specified rows and columns
+    pub fn add_table_with_size(&mut self, rows: usize, cols: usize) -> &mut Table {
+        self.add_table(Table::new(rows, cols))
+    }
+
+    /// Get mutable table by index
+    pub fn table_mut(&mut self, index: usize) -> Option<&mut Table> {
+        self.body
+            .content
+            .iter_mut()
+            .filter_map(|c| {
+                if let BlockContent::Table(t) = c {
+                    Some(t)
+                } else {
+                    None
+                }
+            })
+            .nth(index)
     }
 }
 
