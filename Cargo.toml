@@ -2,11 +2,16 @@
 name = "linch-docx-rs"
 version = "0.1.0"
 edition = "2021"
-description = "A reliable DOCX reading and writing library for Rust"
+authors = ["laofahai"]
+description = "A reliable DOCX reading and writing library for Rust with round-trip preservation"
 license = "MIT"
 repository = "https://github.com/laofahai/linch-docx-rs"
-keywords = ["docx", "word", "ooxml", "office"]
+homepage = "https://github.com/laofahai/linch-docx-rs"
+documentation = "https://docs.rs/linch-docx-rs"
+readme = "README.md"
+keywords = ["docx", "word", "ooxml", "office", "document"]
 categories = ["parser-implementations", "encoding"]
+rust-version = "1.70"
 
 [dependencies]
 zip = "2.2"
