@@ -1,0 +1,19 @@
+[package]
+name = "linch-docx-rs"
+version = "0.1.0"
+edition = "2021"
+description = "A reliable DOCX reading and writing library for Rust"
+license = "MIT"
+repository = "https://github.com/laofahai/linch-docx-rs"
+keywords = ["docx", "word", "ooxml", "office"]
+categories = ["parser-implementations", "encoding"]
+
+[dependencies]
+zip = "2.2"
+quick-xml = "0.37"
+thiserror = "2.0"
+log = "0.4"
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+env_logger = "0.11"
