@@ -110,7 +110,8 @@ impl Run {
                         _ => {
                             // Unknown - preserve
                             let raw = RawXmlElement::from_reader(reader, &e)?;
-                            run.content.push(RunContent::Unknown(RawXmlNode::Element(raw)));
+                            run.content
+                                .push(RunContent::Unknown(RawXmlNode::Element(raw)));
                         }
                     }
                 }
@@ -163,7 +164,8 @@ impl Run {
                                 children: Vec::new(),
                                 self_closing: true,
                             };
-                            run.content.push(RunContent::Unknown(RawXmlNode::Element(raw)));
+                            run.content
+                                .push(RunContent::Unknown(RawXmlNode::Element(raw)));
                         }
                     }
                 }
@@ -211,12 +213,18 @@ impl Run {
 
     /// Check if bold
     pub fn bold(&self) -> bool {
-        self.properties.as_ref().and_then(|p| p.bold).unwrap_or(false)
+        self.properties
+            .as_ref()
+            .and_then(|p| p.bold)
+            .unwrap_or(false)
     }
 
     /// Check if italic
     pub fn italic(&self) -> bool {
-        self.properties.as_ref().and_then(|p| p.italic).unwrap_or(false)
+        self.properties
+            .as_ref()
+            .and_then(|p| p.italic)
+            .unwrap_or(false)
     }
 
     /// Get font size in points (None if not specified)
@@ -236,7 +244,10 @@ impl Run {
 
     /// Check if has strike-through
     pub fn strike(&self) -> bool {
-        self.properties.as_ref().and_then(|p| p.strike).unwrap_or(false)
+        self.properties
+            .as_ref()
+            .and_then(|p| p.strike)
+            .unwrap_or(false)
     }
 
     /// Write to XML writer

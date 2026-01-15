@@ -84,7 +84,8 @@ impl ContentTypes {
     /// Serialize to XML string
     pub fn to_xml(&self) -> String {
         let mut buf = Vec::new();
-        self.write_to(&mut buf).expect("write to Vec should not fail");
+        self.write_to(&mut buf)
+            .expect("write to Vec should not fail");
         String::from_utf8(buf).expect("XML should be valid UTF-8")
     }
 
@@ -93,7 +94,11 @@ impl ContentTypes {
         let mut xml = Writer::new(writer);
 
         // XML declaration
-        xml.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), Some("yes"))))?;
+        xml.write_event(Event::Decl(BytesDecl::new(
+            "1.0",
+            Some("UTF-8"),
+            Some("yes"),
+        )))?;
 
         // Types element
         let mut types = BytesStart::new("Types");
@@ -173,17 +178,6 @@ pub const RELATIONSHIPS: &str = "application/vnd.openxmlformats-package.relation
 pub const XML: &str = "application/xml";
 pub const MAIN_DOCUMENT: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
-pub const STYLES: &str =
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml";
-pub const SETTINGS: &str =
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml";
-pub const NUMBERING: &str =
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml";
-pub const FONT_TABLE: &str =
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml";
-pub const CORE_PROPERTIES: &str = "application/vnd.openxmlformats-package.core-properties+xml";
-pub const EXTENDED_PROPERTIES: &str =
-    "application/vnd.openxmlformats-officedocument.extended-properties+xml";
 
 #[cfg(test)]
 mod tests {

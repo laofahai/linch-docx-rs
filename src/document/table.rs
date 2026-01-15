@@ -410,7 +410,8 @@ impl TableCellProperties {
                                 .and_then(|v| v.parse().ok());
                         }
                         b"gridSpan" => {
-                            props.grid_span = crate::xml::get_w_val(&e).and_then(|v| v.parse().ok());
+                            props.grid_span =
+                                crate::xml::get_w_val(&e).and_then(|v| v.parse().ok());
                         }
                         b"vMerge" => {
                             let val = crate::xml::get_w_val(&e);

@@ -90,7 +90,8 @@ impl Relationships {
     /// Serialize to XML string
     pub fn to_xml(&self) -> String {
         let mut buf = Vec::new();
-        self.write_to(&mut buf).expect("write to Vec should not fail");
+        self.write_to(&mut buf)
+            .expect("write to Vec should not fail");
         String::from_utf8(buf).expect("XML should be valid UTF-8")
     }
 
@@ -99,7 +100,11 @@ impl Relationships {
         let mut xml = Writer::new(writer);
 
         // XML declaration
-        xml.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), Some("yes"))))?;
+        xml.write_event(Event::Decl(BytesDecl::new(
+            "1.0",
+            Some("UTF-8"),
+            Some("yes"),
+        )))?;
 
         // Relationships element
         let mut rels_elem = BytesStart::new("Relationships");
@@ -200,13 +205,7 @@ impl Relationships {
         let max_id = self
             .items
             .keys()
-            .filter_map(|id| {
-                if id.starts_with("rId") {
-                    id[3..].parse::<u32>().ok()
-                } else {
-                    None
-                }
-            })
+            .filter_map(|id| id.strip_prefix("rId").and_then(|n| n.parse::<u32>().ok()))
             .max()
             .unwrap_or(0);
 

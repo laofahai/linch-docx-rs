@@ -29,7 +29,10 @@ fn test_open_simple_docx() {
     assert!(doc_part.is_some(), "Main document part missing");
 
     // Verify document content
-    let doc_data = doc_part.unwrap().data_as_str().expect("Document should be UTF-8");
+    let doc_data = doc_part
+        .unwrap()
+        .data_as_str()
+        .expect("Document should be UTF-8");
     assert!(doc_data.contains("Hello, World!"));
     assert!(doc_data.contains("This is a heading"));
     assert!(doc_data.contains("bold italic"));
@@ -57,7 +60,10 @@ fn test_roundtrip_simple_docx() {
     // Verify same content
     let doc1 = pkg.main_document_part().unwrap().data_as_str().unwrap();
     let doc2 = pkg2.main_document_part().unwrap().data_as_str().unwrap();
-    assert_eq!(doc1, doc2, "Document content should be identical after roundtrip");
+    assert_eq!(
+        doc1, doc2,
+        "Document content should be identical after roundtrip"
+    );
 }
 
 #[test]
@@ -71,7 +77,8 @@ fn test_list_all_parts() {
 
     println!("Parts in package:");
     for (uri, part) in pkg.parts() {
-        println!("  {} ({}) - {} bytes",
+        println!(
+            "  {} ({}) - {} bytes",
             uri,
             part.content_type(),
             part.data().len()

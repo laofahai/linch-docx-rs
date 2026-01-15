@@ -204,7 +204,10 @@ mod tests {
     #[test]
     fn test_relationships_uri() {
         let uri = PartUri::new("/word/document.xml").unwrap();
-        assert_eq!(uri.relationships_uri().as_str(), "/word/_rels/document.xml.rels");
+        assert_eq!(
+            uri.relationships_uri().as_str(),
+            "/word/_rels/document.xml.rels"
+        );
     }
 
     #[test]

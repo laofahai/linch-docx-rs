@@ -90,7 +90,8 @@ impl Document {
         // Ensure the relationship exists for the main document
         if self.package.main_document_part().is_none() {
             use crate::opc::rel_types;
-            self.package.add_relationship(rel_types::OFFICE_DOCUMENT, uri.as_str());
+            self.package
+                .add_relationship(rel_types::OFFICE_DOCUMENT, uri.as_str());
         }
 
         Ok(())
@@ -103,7 +104,11 @@ impl Document {
 
     /// Get paragraph count
     pub fn paragraph_count(&self) -> usize {
-        self.body.content.iter().filter(|c| matches!(c, BlockContent::Paragraph(_))).count()
+        self.body
+            .content
+            .iter()
+            .filter(|c| matches!(c, BlockContent::Paragraph(_)))
+            .count()
     }
 
     /// Get paragraph by index
@@ -118,7 +123,11 @@ impl Document {
 
     /// Get table count
     pub fn table_count(&self) -> usize {
-        self.body.content.iter().filter(|c| matches!(c, BlockContent::Table(_))).count()
+        self.body
+            .content
+            .iter()
+            .filter(|c| matches!(c, BlockContent::Table(_)))
+            .count()
     }
 
     /// Get table by index
@@ -230,7 +239,11 @@ fn serialize_document_xml(body: &Body) -> Result<String> {
     let mut writer = Writer::new(&mut buffer);
 
     // XML declaration
-    writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), Some("yes"))))?;
+    writer.write_event(Event::Decl(BytesDecl::new(
+        "1.0",
+        Some("UTF-8"),
+        Some("yes"),
+    )))?;
 
     // Document element with namespaces
     let mut doc_start = BytesStart::new("w:document");
@@ -246,11 +259,14 @@ fn serialize_document_xml(body: &Body) -> Result<String> {
     writer.write_event(Event::End(BytesEnd::new("w:document")))?;
 
     let xml_bytes = buffer.into_inner();
-    Ok(String::from_utf8(xml_bytes).map_err(|e| Error::InvalidDocument(e.to_string()))?)
+    String::from_utf8(xml_bytes).map_err(|e| Error::InvalidDocument(e.to_string()))
 }
 
 /// Skip an element and all its children
-fn skip_element<R: BufRead>(reader: &mut Reader<R>, start: &quick_xml::events::BytesStart) -> Result<()> {
+fn skip_element<R: BufRead>(
+    reader: &mut Reader<R>,
+    start: &quick_xml::events::BytesStart,
+) -> Result<()> {
     let target = start.name().as_ref().to_vec();
     let mut depth = 1;
     let mut buf = Vec::new();

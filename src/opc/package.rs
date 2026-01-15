@@ -3,8 +3,8 @@
 //! Handles reading and writing DOCX files as ZIP packages
 
 use crate::error::{Error, Result};
-use crate::opc::{ContentTypes, Part, PartUri, Relationships};
 use crate::opc::relationships::rel_types;
+use crate::opc::{ContentTypes, Part, PartUri, Relationships};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Cursor, Read, Seek, Write};
@@ -84,8 +84,8 @@ impl Package {
     /// Write the package to a writer
     pub fn write_to<W: Write + Seek>(&self, writer: W) -> Result<()> {
         let mut zip = ZipWriter::new(writer);
-        let options: FileOptions<()> = FileOptions::default()
-            .compression_method(CompressionMethod::Deflated);
+        let options: FileOptions<()> =
+            FileOptions::default().compression_method(CompressionMethod::Deflated);
 
         // Write [Content_Types].xml
         zip.start_file("[Content_Types].xml", options)?;
@@ -259,7 +259,10 @@ impl Package {
         Ok(())
     }
 
-    fn read_part_relationships<R: Read + Seek>(&mut self, archive: &mut ZipArchive<R>) -> Result<()> {
+    fn read_part_relationships<R: Read + Seek>(
+        &mut self,
+        archive: &mut ZipArchive<R>,
+    ) -> Result<()> {
         // Collect all part URIs first to avoid borrow issues
         let part_uris: Vec<PartUri> = self.parts.keys().cloned().collect();
 

@@ -34,8 +34,5 @@ pub fn document_namespaces() -> Vec<(&'static str, &'static str)> {
 
 /// Minimal namespace declarations for document.xml
 pub fn minimal_document_namespaces() -> Vec<(&'static str, &'static str)> {
-    vec![
-        ("xmlns:w", W),
-        ("xmlns:r", R),
-    ]
+    vec![("xmlns:w", W), ("xmlns:r", R)]
 }

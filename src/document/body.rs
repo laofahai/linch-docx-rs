@@ -56,7 +56,8 @@ impl Body {
                         _ => {
                             // Unknown element - preserve for round-trip
                             let raw = crate::xml::RawXmlElement::from_reader(reader, &e)?;
-                            body.content.push(BlockContent::Unknown(RawXmlNode::Element(raw)));
+                            body.content
+                                .push(BlockContent::Unknown(RawXmlNode::Element(raw)));
                         }
                     }
                 }
@@ -87,7 +88,8 @@ impl Body {
                                 children: Vec::new(),
                                 self_closing: true,
                             };
-                            body.content.push(BlockContent::Unknown(RawXmlNode::Element(raw)));
+                            body.content
+                                .push(BlockContent::Unknown(RawXmlNode::Element(raw)));
                         }
                     }
                 }

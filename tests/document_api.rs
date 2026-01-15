@@ -107,7 +107,10 @@ fn test_create_new_document() {
 
     // Verify paragraphs were added
     assert_eq!(doc.paragraph_count(), 2);
-    assert_eq!(doc.text(), "Hello from Rust!\nThis is the second paragraph.");
+    assert_eq!(
+        doc.text(),
+        "Hello from Rust!\nThis is the second paragraph."
+    );
 
     // Save to bytes
     let bytes = doc.to_bytes().expect("Should serialize to bytes");

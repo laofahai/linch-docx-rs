@@ -8,7 +8,7 @@ mod part;
 mod part_uri;
 mod relationships;
 
-pub use content_types::{ContentTypes, MAIN_DOCUMENT, RELATIONSHIPS, STYLES, XML};
+pub use content_types::{ContentTypes, MAIN_DOCUMENT, RELATIONSHIPS, XML};
 pub use package::Package;
 pub use part::Part;
 pub use part_uri::{well_known, PartUri};

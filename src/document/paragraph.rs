@@ -102,7 +102,8 @@ impl Paragraph {
                             let name = crate::xml::get_attr(&e, "w:name")
                                 .or_else(|| crate::xml::get_attr(&e, "name"))
                                 .unwrap_or_default();
-                            para.content.push(ParagraphContent::BookmarkStart { id, name });
+                            para.content
+                                .push(ParagraphContent::BookmarkStart { id, name });
                             // bookmarkStart is typically empty, but read until end just in case
                             skip_to_end(reader, &e)?;
                         }
@@ -116,7 +117,8 @@ impl Paragraph {
                         _ => {
                             // Unknown - preserve
                             let raw = RawXmlElement::from_reader(reader, &e)?;
-                            para.content.push(ParagraphContent::Unknown(RawXmlNode::Element(raw)));
+                            para.content
+                                .push(ParagraphContent::Unknown(RawXmlNode::Element(raw)));
                         }
                     }
                 }
@@ -136,7 +138,8 @@ impl Paragraph {
                             let name = crate::xml::get_attr(&e, "w:name")
                                 .or_else(|| crate::xml::get_attr(&e, "name"))
                                 .unwrap_or_default();
-                            para.content.push(ParagraphContent::BookmarkStart { id, name });
+                            para.content
+                                .push(ParagraphContent::BookmarkStart { id, name });
                         }
                         b"bookmarkEnd" => {
                             let id = crate::xml::get_attr(&e, "w:id")
@@ -161,7 +164,8 @@ impl Paragraph {
                                 children: Vec::new(),
                                 self_closing: true,
                             };
-                            para.content.push(ParagraphContent::Unknown(RawXmlNode::Element(raw)));
+                            para.content
+                                .push(ParagraphContent::Unknown(RawXmlNode::Element(raw)));
                         }
                     }
                 }
@@ -293,9 +297,7 @@ impl Paragraph {
 
     /// Set style
     pub fn set_style(&mut self, style: impl Into<String>) {
-        self.properties
-            .get_or_insert_with(Default::default)
-            .style = Some(style.into());
+        self.properties.get_or_insert_with(Default::default).style = Some(style.into());
     }
 }
 
@@ -461,12 +463,12 @@ impl ParagraphProperties {
 impl Hyperlink {
     /// Parse from reader
     pub fn from_reader<R: BufRead>(reader: &mut Reader<R>, start: &BytesStart) -> Result<Self> {
-        let mut link = Hyperlink::default();
-
-        // Get r:id or anchor
-        link.r_id = crate::xml::get_attr(start, "r:id");
-        link.anchor = crate::xml::get_attr(start, "w:anchor")
-            .or_else(|| crate::xml::get_attr(start, "anchor"));
+        let mut link = Hyperlink {
+            r_id: crate::xml::get_attr(start, "r:id"),
+            anchor: crate::xml::get_attr(start, "w:anchor")
+                .or_else(|| crate::xml::get_attr(start, "anchor")),
+            ..Default::default()
+        };
 
         let mut buf = Vec::new();
 

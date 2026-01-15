@@ -90,9 +90,7 @@ impl RawXmlElement {
                     }
                 }
                 Event::Comment(c) => {
-                    children.push(RawXmlNode::Comment(
-                        String::from_utf8_lossy(&c).to_string(),
-                    ));
+                    children.push(RawXmlNode::Comment(String::from_utf8_lossy(&c).to_string()));
                 }
                 Event::End(e) => {
                     let end_name = String::from_utf8_lossy(e.name().as_ref()).to_string();
