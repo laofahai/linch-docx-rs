@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.1-alpha.3](https://github.com/laofahai/linch-docx-rs/compare/v0.0.1-alpha.2...v0.0.1-alpha.3) - 2026-01-15
+
+### Added
+
+- add numbering support and table creation API
+
 ## [0.0.1-alpha.2](https://github.com/laofahai/linch-docx-rs/compare/v0.0.1-alpha.1...v0.0.1-alpha.2) - 2026-01-15
 
 ### Added
