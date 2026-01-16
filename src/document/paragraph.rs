@@ -1,5 +1,6 @@
 //! Paragraph element (w:p)
 
+use crate::document::numbering::NumberingInfo;
 use crate::document::Run;
 use crate::error::Result;
 use crate::xml::{get_w_val, RawXmlElement, RawXmlNode};
@@ -242,6 +243,47 @@ impl Paragraph {
             }
         }
         false
+    }
+
+    /// Get numbering information if this paragraph is a list item
+    pub fn numbering(&self) -> Option<NumberingInfo> {
+        let props = self.properties.as_ref()?;
+        let num_id = props.num_id?;
+        let level = props.num_level.unwrap_or(0);
+        Some(NumberingInfo::new(num_id, level))
+    }
+
+    /// Check if this paragraph is a list item
+    pub fn is_list_item(&self) -> bool {
+        self.properties
+            .as_ref()
+            .and_then(|p| p.num_id)
+            .is_some()
+    }
+
+    /// Get the list level (0-8) if this is a list item
+    pub fn list_level(&self) -> Option<u32> {
+        let props = self.properties.as_ref()?;
+        if props.num_id.is_some() {
+            Some(props.num_level.unwrap_or(0))
+        } else {
+            None
+        }
+    }
+
+    /// Set numbering for this paragraph (makes it a list item)
+    pub fn set_numbering(&mut self, num_id: u32, level: u32) {
+        let props = self.properties.get_or_insert_with(Default::default);
+        props.num_id = Some(num_id);
+        props.num_level = Some(level);
+    }
+
+    /// Remove numbering from this paragraph
+    pub fn clear_numbering(&mut self) {
+        if let Some(ref mut props) = self.properties {
+            props.num_id = None;
+            props.num_level = None;
+        }
     }
 
     /// Write to XML writer
