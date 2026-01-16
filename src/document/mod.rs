@@ -10,7 +10,10 @@ pub use body::{BlockContent, Body};
 pub use numbering::{AbstractNum, Level, LevelOverride, Num, NumberFormat, Numbering};
 pub use paragraph::{Hyperlink, Paragraph, ParagraphContent, ParagraphProperties};
 pub use run::{BreakType, Run, RunContent, RunProperties};
-pub use table::{GridColumn, Table, TableCell, TableCellProperties, TableRow, VMerge};
+pub use table::{
+    GridColumn, Table, TableAlignment, TableBuilder, TableCell, TableCellProperties, TableRow,
+    TableWidth, VMerge, VerticalAlignment,
+};
 
 use crate::error::{Error, Result};
 use crate::opc::{Package, Part, PartUri};

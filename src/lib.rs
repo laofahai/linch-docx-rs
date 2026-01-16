@@ -32,6 +32,9 @@ pub mod error;
 pub mod opc;
 pub mod xml;
 
-pub use document::{Document, Paragraph, Run, Table};
+pub use document::{
+    Document, Paragraph, Run, Table, TableAlignment, TableCell, TableRow, TableWidth,
+    VerticalAlignment,
+};
 pub use error::{Error, Result};
 pub use opc::{Package, Part, PartUri};
