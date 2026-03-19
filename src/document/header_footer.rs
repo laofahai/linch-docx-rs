@@ -5,7 +5,7 @@ use crate::error::Result;
 use crate::xml::{RawXmlElement, RawXmlNode};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
 use quick_xml::{Reader, Writer};
-use std::io::{BufRead, Cursor};
+use std::io::Cursor;
 
 /// A header or footer part
 #[derive(Clone, Debug, Default)]
@@ -86,7 +86,11 @@ impl HeaderFooter {
         let mut buffer = Cursor::new(Vec::new());
         let mut writer = Writer::new(&mut buffer);
 
-        writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), Some("yes"))))?;
+        writer.write_event(Event::Decl(BytesDecl::new(
+            "1.0",
+            Some("UTF-8"),
+            Some("yes"),
+        )))?;
 
         let tag = if self.is_header { "w:hdr" } else { "w:ftr" };
         let mut start = BytesStart::new(tag);

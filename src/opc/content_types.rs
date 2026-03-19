@@ -183,6 +183,14 @@ pub const NUMBERING: &str =
 pub const STYLES: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml";
 pub const CORE_PROPERTIES: &str = "application/vnd.openxmlformats-package.core-properties+xml";
+pub const HEADER: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml";
+pub const FOOTER: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml";
+pub const FOOTNOTES: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml";
+pub const ENDNOTES: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml";
 
 #[cfg(test)]
 mod tests {

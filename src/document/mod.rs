@@ -1,6 +1,8 @@
 //! Document model - high-level API for DOCX documents
 
 mod body;
+mod footnotes;
+mod header_footer;
 mod numbering;
 mod paragraph;
 mod properties;
@@ -8,8 +10,11 @@ mod run;
 mod section;
 mod styles;
 mod table;
+mod xml_ops;
 
 pub use body::{BlockContent, Body};
+pub use footnotes::{Note, Notes};
+pub use header_footer::HeaderFooter;
 pub use numbering::{AbstractNum, Level, LevelOverride, Num, NumberFormat, Numbering};
 pub use paragraph::{
     Alignment, Hyperlink, Indentation, LineSpacing, Paragraph, ParagraphContent,
@@ -29,11 +34,12 @@ pub use table::{
 
 use crate::error::{Error, Result};
 use crate::opc::{Package, Part, PartUri};
-use crate::xml;
-use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
-use quick_xml::{Reader, Writer};
-use std::io::{BufRead, Cursor};
 use std::path::Path;
+
+use xml_ops::{parse_document_xml, serialize_document_xml};
+
+/// List of headers/footers keyed by relationship ID
+type HeaderFooterList = Vec<(String, HeaderFooter)>;
 
 /// A DOCX document
 #[derive(Debug)]
@@ -48,6 +54,14 @@ pub struct Document {
     styles: Option<Styles>,
     /// Core properties (from core.xml)
     core_properties: Option<CoreProperties>,
+    /// Headers (keyed by relationship ID)
+    headers: HeaderFooterList,
+    /// Footers (keyed by relationship ID)
+    footers: HeaderFooterList,
+    /// Footnotes
+    footnotes: Option<Notes>,
+    /// Endnotes
+    endnotes: Option<Notes>,
 }
 
 impl Document {
@@ -83,12 +97,23 @@ impl Document {
         // Try to load core properties
         let core_properties = Self::load_core_properties(&package);
 
+        // Load headers and footers
+        let (headers, footers) = Self::load_headers_footers(&package);
+
+        // Load footnotes and endnotes
+        let footnotes = Self::load_notes(&package, true);
+        let endnotes = Self::load_notes(&package, false);
+
         Ok(Self {
             package,
             body,
             numbering,
             styles,
             core_properties,
+            headers,
+            footers,
+            footnotes,
+            endnotes,
         })
     }
 
@@ -149,6 +174,80 @@ impl Document {
         CoreProperties::from_xml(xml_str).ok()
     }
 
+    /// Load headers and footers from the package
+    fn load_headers_footers(package: &Package) -> (HeaderFooterList, HeaderFooterList) {
+        let mut headers = Vec::new();
+        let mut footers = Vec::new();
+
+        let doc_part = match package.main_document_part() {
+            Some(p) => p,
+            None => return (headers, footers),
+        };
+        let rels = match doc_part.relationships() {
+            Some(r) => r,
+            None => return (headers, footers),
+        };
+
+        // Load headers
+        for rel in rels.all_by_type(crate::opc::rel_types::HEADER) {
+            let uri = if rel.target.starts_with('/') {
+                PartUri::new(&rel.target).ok()
+            } else {
+                PartUri::new(&format!("/word/{}", rel.target)).ok()
+            };
+            if let Some(uri) = uri {
+                if let Some(part) = package.part(&uri) {
+                    if let Ok(xml_str) = part.data_as_str() {
+                        if let Ok(hf) = HeaderFooter::from_xml(xml_str, true) {
+                            headers.push((rel.id.clone(), hf));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Load footers
+        for rel in rels.all_by_type(crate::opc::rel_types::FOOTER) {
+            let uri = if rel.target.starts_with('/') {
+                PartUri::new(&rel.target).ok()
+            } else {
+                PartUri::new(&format!("/word/{}", rel.target)).ok()
+            };
+            if let Some(uri) = uri {
+                if let Some(part) = package.part(&uri) {
+                    if let Ok(xml_str) = part.data_as_str() {
+                        if let Ok(hf) = HeaderFooter::from_xml(xml_str, false) {
+                            footers.push((rel.id.clone(), hf));
+                        }
+                    }
+                }
+            }
+        }
+
+        (headers, footers)
+    }
+
+    /// Load footnotes or endnotes from the package
+    fn load_notes(package: &Package, is_footnotes: bool) -> Option<Notes> {
+        let doc_part = package.main_document_part()?;
+        let rels = doc_part.relationships()?;
+        let rel_type = if is_footnotes {
+            crate::opc::rel_types::FOOTNOTES
+        } else {
+            crate::opc::rel_types::ENDNOTES
+        };
+        let rel = rels.by_type(rel_type)?;
+        let target = &rel.target;
+        let uri = if target.starts_with('/') {
+            PartUri::new(target).ok()?
+        } else {
+            PartUri::new(&format!("/word/{}", target)).ok()?
+        };
+        let part = package.part(&uri)?;
+        let xml_str = part.data_as_str().ok()?;
+        Notes::from_xml(xml_str, is_footnotes).ok()
+    }
+
     /// Create a new empty document
     pub fn new() -> Self {
         Self {
@@ -157,6 +256,10 @@ impl Document {
             numbering: None,
             styles: None,
             core_properties: None,
+            headers: Vec::new(),
+            footers: Vec::new(),
+            footnotes: None,
+            endnotes: None,
         }
     }
 
@@ -226,6 +329,46 @@ impl Document {
                 core_xml.into_bytes(),
             );
             self.package.add_part(core_part);
+        }
+
+        // Update headers
+        for (r_id, hf) in &self.headers {
+            let hf_xml = hf.to_xml()?;
+            let hf_uri = PartUri::new(&format!("/word/header_{}.xml", r_id))?;
+            let hf_part = Part::new(hf_uri, crate::opc::HEADER.to_string(), hf_xml.into_bytes());
+            self.package.add_part(hf_part);
+        }
+
+        // Update footnotes
+        if let Some(ref fn_notes) = self.footnotes {
+            let fn_xml = fn_notes.to_xml()?;
+            let fn_uri = PartUri::new("/word/footnotes.xml")?;
+            let fn_part = Part::new(
+                fn_uri,
+                crate::opc::FOOTNOTES.to_string(),
+                fn_xml.into_bytes(),
+            );
+            self.package.add_part(fn_part);
+        }
+
+        // Update endnotes
+        if let Some(ref en_notes) = self.endnotes {
+            let en_xml = en_notes.to_xml()?;
+            let en_uri = PartUri::new("/word/endnotes.xml")?;
+            let en_part = Part::new(
+                en_uri,
+                crate::opc::ENDNOTES.to_string(),
+                en_xml.into_bytes(),
+            );
+            self.package.add_part(en_part);
+        }
+
+        // Update footers
+        for (r_id, hf) in &self.footers {
+            let hf_xml = hf.to_xml()?;
+            let hf_uri = PartUri::new(&format!("/word/footer_{}.xml", r_id))?;
+            let hf_part = Part::new(hf_uri, crate::opc::FOOTER.to_string(), hf_xml.into_bytes());
+            self.package.add_part(hf_part);
         }
 
         Ok(())
@@ -526,6 +669,62 @@ impl Document {
         count
     }
 
+    /// Get all headers
+    pub fn headers(&self) -> &[(String, HeaderFooter)] {
+        &self.headers
+    }
+
+    /// Get all footers
+    pub fn footers(&self) -> &[(String, HeaderFooter)] {
+        &self.footers
+    }
+
+    /// Get default header (first one)
+    pub fn default_header(&self) -> Option<&HeaderFooter> {
+        self.headers.first().map(|(_, hf)| hf)
+    }
+
+    /// Get default footer (first one)
+    pub fn default_footer(&self) -> Option<&HeaderFooter> {
+        self.footers.first().map(|(_, hf)| hf)
+    }
+
+    /// Get mutable default header
+    pub fn default_header_mut(&mut self) -> Option<&mut HeaderFooter> {
+        self.headers.first_mut().map(|(_, hf)| hf)
+    }
+
+    /// Get mutable default footer
+    pub fn default_footer_mut(&mut self) -> Option<&mut HeaderFooter> {
+        self.footers.first_mut().map(|(_, hf)| hf)
+    }
+
+    /// Get footnotes
+    pub fn footnotes(&self) -> Option<&Notes> {
+        self.footnotes.as_ref()
+    }
+
+    /// Get mutable footnotes (creates if None)
+    pub fn footnotes_mut(&mut self) -> &mut Notes {
+        self.footnotes.get_or_insert_with(|| Notes {
+            is_footnotes: true,
+            ..Default::default()
+        })
+    }
+
+    /// Get endnotes
+    pub fn endnotes(&self) -> Option<&Notes> {
+        self.endnotes.as_ref()
+    }
+
+    /// Get mutable endnotes (creates if None)
+    pub fn endnotes_mut(&mut self) -> &mut Notes {
+        self.endnotes.get_or_insert_with(|| Notes {
+            is_footnotes: false,
+            ..Default::default()
+        })
+    }
+
     /// Find text locations across all paragraphs
     pub fn find_text(&self, needle: &str) -> Vec<TextLocation> {
         let mut results = Vec::new();
@@ -573,174 +772,5 @@ fn replace_text_in_paragraph(para: &mut Paragraph, find: &str, replace: &str) ->
 impl Default for Document {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Parse document.xml content
-fn parse_document_xml(xml: &str) -> Result<Body> {
-    let mut reader = Reader::from_str(xml);
-    reader.config_mut().trim_text(true);
-
-    let mut buf = Vec::new();
-    let mut body = None;
-
-    loop {
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(e) => {
-                let name = e.name();
-                let local = name.local_name();
-
-                match local.as_ref() {
-                    b"body" => {
-                        body = Some(Body::from_reader(&mut reader)?);
-                    }
-                    b"document" => {
-                        // Continue to find body
-                    }
-                    _ => {
-                        // Skip unknown elements at document level
-                        skip_element(&mut reader, &e)?;
-                    }
-                }
-            }
-            Event::Eof => break,
-            _ => {}
-        }
-        buf.clear();
-    }
-
-    body.ok_or_else(|| Error::InvalidDocument("Missing w:body element".into()))
-}
-
-/// Serialize body to document.xml content
-fn serialize_document_xml(body: &Body) -> Result<String> {
-    let mut buffer = Cursor::new(Vec::new());
-    let mut writer = Writer::new(&mut buffer);
-
-    // XML declaration
-    writer.write_event(Event::Decl(BytesDecl::new(
-        "1.0",
-        Some("UTF-8"),
-        Some("yes"),
-    )))?;
-
-    // Document element with namespaces
-    let mut doc_start = BytesStart::new("w:document");
-    for (attr, value) in xml::document_namespaces() {
-        doc_start.push_attribute((attr, value));
-    }
-    writer.write_event(Event::Start(doc_start))?;
-
-    // Body
-    body.write_to(&mut writer)?;
-
-    // Close document
-    writer.write_event(Event::End(BytesEnd::new("w:document")))?;
-
-    let xml_bytes = buffer.into_inner();
-    String::from_utf8(xml_bytes).map_err(|e| Error::InvalidDocument(e.to_string()))
-}
-
-/// Skip an element and all its children
-fn skip_element<R: BufRead>(
-    reader: &mut Reader<R>,
-    start: &quick_xml::events::BytesStart,
-) -> Result<()> {
-    let target = start.name().as_ref().to_vec();
-    let mut depth = 1;
-    let mut buf = Vec::new();
-
-    loop {
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(e) if e.name().as_ref() == target => depth += 1,
-            Event::End(e) if e.name().as_ref() == target => {
-                depth -= 1;
-                if depth == 0 {
-                    break;
-                }
-            }
-            Event::Eof => break,
-            _ => {}
-        }
-        buf.clear();
-    }
-
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const SIMPLE_DOC: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:body>
-    <w:p>
-      <w:r>
-        <w:t>Hello, World!</w:t>
-      </w:r>
-    </w:p>
-    <w:p>
-      <w:pPr>
-        <w:pStyle w:val="Heading1"/>
-      </w:pPr>
-      <w:r>
-        <w:rPr>
-          <w:b/>
-        </w:rPr>
-        <w:t>This is a heading</w:t>
-      </w:r>
-    </w:p>
-  </w:body>
-</w:document>"#;
-
-    #[test]
-    fn test_parse_simple_document() {
-        let body = parse_document_xml(SIMPLE_DOC).unwrap();
-
-        // Should have 2 paragraphs
-        let paras: Vec<_> = body.paragraphs().collect();
-        assert_eq!(paras.len(), 2);
-
-        // First paragraph
-        assert_eq!(paras[0].text(), "Hello, World!");
-
-        // Second paragraph
-        assert_eq!(paras[1].text(), "This is a heading");
-        assert_eq!(paras[1].style(), Some("Heading1"));
-
-        // Check run properties
-        let runs: Vec<_> = paras[1].runs().collect();
-        assert_eq!(runs.len(), 1);
-        assert!(runs[0].bold());
-    }
-
-    #[test]
-    fn test_parse_with_formatting() {
-        let xml = r#"<?xml version="1.0"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:body>
-    <w:p>
-      <w:r>
-        <w:rPr>
-          <w:b/>
-          <w:i/>
-          <w:sz w:val="28"/>
-          <w:color w:val="FF0000"/>
-        </w:rPr>
-        <w:t>Formatted text</w:t>
-      </w:r>
-    </w:p>
-  </w:body>
-</w:document>"#;
-
-        let body = parse_document_xml(xml).unwrap();
-        let para = body.paragraphs().next().unwrap();
-        let run = para.runs().next().unwrap();
-
-        assert!(run.bold());
-        assert!(run.italic());
-        assert_eq!(run.font_size_pt(), Some(14.0)); // 28 half-points = 14pt
-        assert_eq!(run.color(), Some("FF0000"));
     }
 }

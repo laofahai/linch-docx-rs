@@ -9,7 +9,8 @@ mod part_uri;
 mod relationships;
 
 pub use content_types::{
-    ContentTypes, CORE_PROPERTIES, MAIN_DOCUMENT, NUMBERING, RELATIONSHIPS, STYLES, XML,
+    ContentTypes, CORE_PROPERTIES, ENDNOTES, FOOTER, FOOTNOTES, HEADER, MAIN_DOCUMENT, NUMBERING,
+    RELATIONSHIPS, STYLES, XML,
 };
 pub use package::Package;
 pub use part::Part;

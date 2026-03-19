@@ -34,9 +34,10 @@ pub mod units;
 pub mod xml;
 
 pub use document::{
-    Alignment, CoreProperties, DocDefaults, Document, Indentation, LineSpacing, PageMargin,
-    PageOrientation, PageSize, Paragraph, Run, SectionProperties, Style, StyleType, Styles, Table,
-    TableAlignment, TableCell, TableRow, TableWidth, TextLocation, VerticalAlignment,
+    Alignment, CoreProperties, DocDefaults, Document, HeaderFooter, Indentation, LineSpacing, Note,
+    Notes, PageMargin, PageOrientation, PageSize, Paragraph, Run, SectionProperties, Style,
+    StyleType, Styles, Table, TableAlignment, TableCell, TableRow, TableWidth, TextLocation,
+    VerticalAlignment,
 };
 pub use error::{Error, Result};
 pub use opc::{Package, Part, PartUri};
