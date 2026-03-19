@@ -34,10 +34,10 @@ pub mod units;
 pub mod xml;
 
 pub use document::{
-    Alignment, CoreProperties, DocDefaults, Document, HeaderFooter, ImageData, Indentation,
-    InlineImage, LineSpacing, Note, Notes, PageMargin, PageOrientation, PageSize, Paragraph, Run,
-    RunContent, SectionProperties, Style, StyleType, Styles, Table, TableAlignment, TableCell,
-    TableRow, TableWidth, TemplateContext, TextLocation, VerticalAlignment,
+    Alignment, Comment, Comments, CoreProperties, DocDefaults, Document, HeaderFooter, ImageData,
+    Indentation, InlineImage, LineSpacing, Note, Notes, PageMargin, PageOrientation, PageSize,
+    Paragraph, Run, RunContent, SectionProperties, Style, StyleType, Styles, Table, TableAlignment,
+    TableCell, TableRow, TableWidth, TemplateContext, TextLocation, VerticalAlignment,
 };
 pub use error::{Error, Result};
 pub use opc::{Package, Part, PartUri};

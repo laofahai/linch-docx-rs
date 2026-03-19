@@ -288,6 +288,8 @@ pub mod rel_types {
         "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties";
     pub const EXTENDED_PROPERTIES: &str =
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties";
+    pub const COMMENTS: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments";
 }
 
 #[cfg(test)]

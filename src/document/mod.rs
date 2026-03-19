@@ -1,9 +1,11 @@
 //! Document model - high-level API for DOCX documents
 
 mod body;
+mod comments;
 mod footnotes;
 mod header_footer;
 mod image;
+mod loaders;
 mod numbering;
 mod paragraph;
 mod properties;
@@ -16,6 +18,7 @@ mod text_ops;
 mod xml_ops;
 
 pub use body::{BlockContent, Body};
+pub use comments::{Comment, Comments};
 pub use footnotes::{Note, Notes};
 pub use header_footer::HeaderFooter;
 pub use image::{ImageData, InlineImage};
@@ -68,6 +71,8 @@ pub struct Document {
     footnotes: Option<Notes>,
     /// Endnotes
     endnotes: Option<Notes>,
+    /// Comments
+    comments: Option<Comments>,
 }
 
 impl Document {
@@ -94,21 +99,13 @@ impl Document {
         let xml = doc_part.data_as_str()?;
         let body = parse_document_xml(xml)?;
 
-        // Try to load numbering.xml
-        let numbering = Self::load_numbering(&package);
-
-        // Try to load styles.xml
-        let styles = Self::load_styles(&package);
-
-        // Try to load core properties
-        let core_properties = Self::load_core_properties(&package);
-
-        // Load headers and footers
-        let (headers, footers) = Self::load_headers_footers(&package);
-
-        // Load footnotes and endnotes
-        let footnotes = Self::load_notes(&package, true);
-        let endnotes = Self::load_notes(&package, false);
+        let numbering = loaders::load_numbering(&package);
+        let styles = loaders::load_styles(&package);
+        let core_properties = loaders::load_core_properties(&package);
+        let (headers, footers) = loaders::load_headers_footers(&package);
+        let footnotes = loaders::load_notes(&package, true);
+        let endnotes = loaders::load_notes(&package, false);
+        let comments = loaders::load_comments(&package);
 
         Ok(Self {
             package,
@@ -120,138 +117,8 @@ impl Document {
             footers,
             footnotes,
             endnotes,
+            comments,
         })
-    }
-
-    /// Load numbering definitions from the package
-    fn load_numbering(package: &Package) -> Option<Numbering> {
-        // First find the numbering part through relationships
-        let doc_part = package.main_document_part()?;
-        let rels = doc_part.relationships()?;
-        let numbering_rel = rels.by_type(crate::opc::rel_types::NUMBERING)?;
-
-        // Resolve the target URI
-        let target = &numbering_rel.target;
-        let numbering_uri = if target.starts_with('/') {
-            PartUri::new(target).ok()?
-        } else {
-            PartUri::new(&format!("/word/{}", target)).ok()?
-        };
-
-        // Get the numbering part
-        let numbering_part = package.part(&numbering_uri)?;
-        let xml = numbering_part.data_as_str().ok()?;
-
-        // Parse numbering.xml
-        Numbering::from_xml(xml).ok()
-    }
-
-    /// Load styles from the package
-    fn load_styles(package: &Package) -> Option<Styles> {
-        let doc_part = package.main_document_part()?;
-        let rels = doc_part.relationships()?;
-        let styles_rel = rels.by_type(crate::opc::rel_types::STYLES)?;
-
-        let target = &styles_rel.target;
-        let styles_uri = if target.starts_with('/') {
-            PartUri::new(target).ok()?
-        } else {
-            PartUri::new(&format!("/word/{}", target)).ok()?
-        };
-
-        let styles_part = package.part(&styles_uri)?;
-        let xml_str = styles_part.data_as_str().ok()?;
-        Styles::from_xml(xml_str).ok()
-    }
-
-    /// Load core properties from the package
-    fn load_core_properties(package: &Package) -> Option<CoreProperties> {
-        let rel = package
-            .relationships()
-            .by_type(crate::opc::rel_types::CORE_PROPERTIES)?;
-        let target = &rel.target;
-        let uri = if target.starts_with('/') {
-            PartUri::new(target).ok()?
-        } else {
-            PartUri::new(&format!("/{}", target)).ok()?
-        };
-        let part = package.part(&uri)?;
-        let xml_str = part.data_as_str().ok()?;
-        CoreProperties::from_xml(xml_str).ok()
-    }
-
-    /// Load headers and footers from the package
-    fn load_headers_footers(package: &Package) -> (HeaderFooterList, HeaderFooterList) {
-        let mut headers = Vec::new();
-        let mut footers = Vec::new();
-
-        let doc_part = match package.main_document_part() {
-            Some(p) => p,
-            None => return (headers, footers),
-        };
-        let rels = match doc_part.relationships() {
-            Some(r) => r,
-            None => return (headers, footers),
-        };
-
-        // Load headers
-        for rel in rels.all_by_type(crate::opc::rel_types::HEADER) {
-            let uri = if rel.target.starts_with('/') {
-                PartUri::new(&rel.target).ok()
-            } else {
-                PartUri::new(&format!("/word/{}", rel.target)).ok()
-            };
-            if let Some(uri) = uri {
-                if let Some(part) = package.part(&uri) {
-                    if let Ok(xml_str) = part.data_as_str() {
-                        if let Ok(hf) = HeaderFooter::from_xml(xml_str, true) {
-                            headers.push((rel.id.clone(), hf));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Load footers
-        for rel in rels.all_by_type(crate::opc::rel_types::FOOTER) {
-            let uri = if rel.target.starts_with('/') {
-                PartUri::new(&rel.target).ok()
-            } else {
-                PartUri::new(&format!("/word/{}", rel.target)).ok()
-            };
-            if let Some(uri) = uri {
-                if let Some(part) = package.part(&uri) {
-                    if let Ok(xml_str) = part.data_as_str() {
-                        if let Ok(hf) = HeaderFooter::from_xml(xml_str, false) {
-                            footers.push((rel.id.clone(), hf));
-                        }
-                    }
-                }
-            }
-        }
-
-        (headers, footers)
-    }
-
-    /// Load footnotes or endnotes from the package
-    fn load_notes(package: &Package, is_footnotes: bool) -> Option<Notes> {
-        let doc_part = package.main_document_part()?;
-        let rels = doc_part.relationships()?;
-        let rel_type = if is_footnotes {
-            crate::opc::rel_types::FOOTNOTES
-        } else {
-            crate::opc::rel_types::ENDNOTES
-        };
-        let rel = rels.by_type(rel_type)?;
-        let target = &rel.target;
-        let uri = if target.starts_with('/') {
-            PartUri::new(target).ok()?
-        } else {
-            PartUri::new(&format!("/word/{}", target)).ok()?
-        };
-        let part = package.part(&uri)?;
-        let xml_str = part.data_as_str().ok()?;
-        Notes::from_xml(xml_str, is_footnotes).ok()
     }
 
     /// Create a new empty document
@@ -266,6 +133,7 @@ impl Document {
             footers: Vec::new(),
             footnotes: None,
             endnotes: None,
+            comments: None,
         }
     }
 
@@ -335,6 +203,9 @@ impl Document {
             if self.endnotes.is_some() && rels.by_type(rel_types::ENDNOTES).is_none() {
                 rels.add(rel_types::ENDNOTES, "endnotes.xml");
             }
+            if self.comments.is_some() && rels.by_type(rel_types::COMMENTS).is_none() {
+                rels.add(rel_types::COMMENTS, "comments.xml");
+            }
         }
 
         // 3. Write all part data
@@ -375,6 +246,14 @@ impl Document {
                 PartUri::new("/word/endnotes.xml")?,
                 crate::opc::ENDNOTES,
                 en_notes.to_xml()?.into_bytes(),
+            ));
+        }
+
+        if let Some(ref comments) = self.comments {
+            self.package.add_part(Part::new(
+                PartUri::new("/word/comments.xml")?,
+                crate::opc::COMMENTS,
+                comments.to_xml()?.into_bytes(),
             ));
         }
 
@@ -735,6 +614,16 @@ impl Document {
             is_footnotes: false,
             ..Default::default()
         })
+    }
+
+    /// Get comments
+    pub fn comments(&self) -> Option<&Comments> {
+        self.comments.as_ref()
+    }
+
+    /// Get mutable comments (creates if None)
+    pub fn comments_mut(&mut self) -> &mut Comments {
+        self.comments.get_or_insert_with(Comments::default)
     }
 
     /// Add an image to the document package and return its relationship ID.
