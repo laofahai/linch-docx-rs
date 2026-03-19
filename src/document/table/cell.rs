@@ -76,16 +76,12 @@ impl TableCell {
 
     /// Set vertical merge
     pub fn set_v_merge(&mut self, v_merge: VMerge) {
-        self.properties
-            .get_or_insert_with(Default::default)
-            .v_merge = Some(v_merge);
+        self.properties.get_or_insert_with(Default::default).v_merge = Some(v_merge);
     }
 
     /// Set vertical alignment
     pub fn set_v_align(&mut self, align: impl Into<String>) {
-        self.properties
-            .get_or_insert_with(Default::default)
-            .v_align = Some(align.into());
+        self.properties.get_or_insert_with(Default::default).v_align = Some(align.into());
     }
 
     /// Parse from reader
@@ -216,9 +212,8 @@ impl TableCell {
 
     /// Set vertical alignment using VerticalAlignment enum
     pub fn set_vertical_alignment(&mut self, align: VerticalAlignment) {
-        self.properties
-            .get_or_insert_with(Default::default)
-            .v_align = Some(align.as_str().to_string());
+        self.properties.get_or_insert_with(Default::default).v_align =
+            Some(align.as_str().to_string());
     }
 
     /// Write to XML writer

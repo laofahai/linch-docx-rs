@@ -58,7 +58,10 @@ impl Table {
         let rows: Vec<TableRow> = data
             .iter()
             .map(|row| {
-                let cells: Vec<TableCell> = row.iter().map(|text| TableCell::new(text.clone())).collect();
+                let cells: Vec<TableCell> = row
+                    .iter()
+                    .map(|text| TableCell::new(text.clone()))
+                    .collect();
                 TableRow {
                     cells,
                     ..Default::default()

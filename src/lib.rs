@@ -30,11 +30,14 @@
 pub mod document;
 pub mod error;
 pub mod opc;
+pub mod units;
 pub mod xml;
 
 pub use document::{
-    Document, Paragraph, Run, Table, TableAlignment, TableCell, TableRow, TableWidth,
-    VerticalAlignment,
+    Alignment, CoreProperties, DocDefaults, Document, Indentation, LineSpacing, PageMargin,
+    PageOrientation, PageSize, Paragraph, Run, SectionProperties, Style, StyleType, Styles, Table,
+    TableAlignment, TableCell, TableRow, TableWidth, TextLocation, VerticalAlignment,
 };
 pub use error::{Error, Result};
 pub use opc::{Package, Part, PartUri};
+pub use units::{Cm, Emu, HalfPt, Inch, Mm, Pt, Twip};

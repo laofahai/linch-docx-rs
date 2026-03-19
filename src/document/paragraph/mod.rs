@@ -1,9 +1,13 @@
 //! Paragraph element (w:p)
 
+mod properties;
+
+pub use properties::{Alignment, Indentation, LineSpacing, ParagraphProperties};
+
 use crate::document::numbering::NumberingInfo;
 use crate::document::Run;
 use crate::error::Result;
-use crate::xml::{get_w_val, RawXmlElement, RawXmlNode};
+use crate::xml::{RawXmlElement, RawXmlNode};
 use quick_xml::events::{BytesEnd, BytesStart, Event};
 use quick_xml::{Reader, Writer};
 use std::io::BufRead;
@@ -47,32 +51,14 @@ pub struct Hyperlink {
     pub runs: Vec<Run>,
 }
 
-/// Paragraph properties (w:pPr)
-#[derive(Clone, Debug, Default)]
-pub struct ParagraphProperties {
-    /// Style ID
-    pub style: Option<String>,
-    /// Justification/alignment
-    pub justification: Option<String>,
-    /// Numbering properties
-    pub num_id: Option<u32>,
-    pub num_level: Option<u32>,
-    /// Outline level (for headings)
-    pub outline_level: Option<u8>,
-    /// Unknown children (preserved)
-    pub unknown_children: Vec<RawXmlNode>,
-}
-
 impl Paragraph {
     /// Parse paragraph from reader (after w:p start tag)
     pub fn from_reader<R: BufRead>(reader: &mut Reader<R>, start: &BytesStart) -> Result<Self> {
         let mut para = Paragraph::default();
 
-        // Parse attributes
         for attr in start.attributes().filter_map(|a| a.ok()) {
             let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
             let value = String::from_utf8_lossy(&attr.value).to_string();
-            // Store all attributes (including rsid* for round-trip)
             para.unknown_attrs.push((key, value));
         }
 
@@ -81,20 +67,20 @@ impl Paragraph {
         loop {
             match reader.read_event_into(&mut buf)? {
                 Event::Start(e) => {
-                    let name = e.name();
-                    let local = name.local_name();
-
+                    let local = e.name().local_name();
                     match local.as_ref() {
                         b"pPr" => {
                             para.properties = Some(ParagraphProperties::from_reader(reader)?);
                         }
                         b"r" => {
-                            let run = Run::from_reader(reader, &e)?;
-                            para.content.push(ParagraphContent::Run(run));
+                            para.content
+                                .push(ParagraphContent::Run(Run::from_reader(reader, &e)?));
                         }
                         b"hyperlink" => {
-                            let link = Hyperlink::from_reader(reader, &e)?;
-                            para.content.push(ParagraphContent::Hyperlink(link));
+                            para.content
+                                .push(ParagraphContent::Hyperlink(Hyperlink::from_reader(
+                                    reader, &e,
+                                )?));
                         }
                         b"bookmarkStart" => {
                             let id = crate::xml::get_attr(&e, "w:id")
@@ -105,7 +91,6 @@ impl Paragraph {
                                 .unwrap_or_default();
                             para.content
                                 .push(ParagraphContent::BookmarkStart { id, name });
-                            // bookmarkStart is typically empty, but read until end just in case
                             skip_to_end(reader, &e)?;
                         }
                         b"bookmarkEnd" => {
@@ -116,7 +101,6 @@ impl Paragraph {
                             skip_to_end(reader, &e)?;
                         }
                         _ => {
-                            // Unknown - preserve
                             let raw = RawXmlElement::from_reader(reader, &e)?;
                             para.content
                                 .push(ParagraphContent::Unknown(RawXmlNode::Element(raw)));
@@ -124,13 +108,11 @@ impl Paragraph {
                     }
                 }
                 Event::Empty(e) => {
-                    let name = e.name();
-                    let local = name.local_name();
-
+                    let local = e.name().local_name();
                     match local.as_ref() {
                         b"r" => {
-                            let run = Run::from_empty(&e)?;
-                            para.content.push(ParagraphContent::Run(run));
+                            para.content
+                                .push(ParagraphContent::Run(Run::from_empty(&e)?));
                         }
                         b"bookmarkStart" => {
                             let id = crate::xml::get_attr(&e, "w:id")
@@ -149,7 +131,6 @@ impl Paragraph {
                             para.content.push(ParagraphContent::BookmarkEnd { id });
                         }
                         _ => {
-                            // Unknown empty element - preserve
                             let raw = RawXmlElement {
                                 name: String::from_utf8_lossy(e.name().as_ref()).to_string(),
                                 attributes: e
@@ -170,11 +151,7 @@ impl Paragraph {
                         }
                     }
                 }
-                Event::End(e) => {
-                    if e.name().local_name().as_ref() == b"p" {
-                        break;
-                    }
-                }
+                Event::End(e) if e.name().local_name().as_ref() == b"p" => break,
                 Event::Eof => break,
                 _ => {}
             }
@@ -187,13 +164,11 @@ impl Paragraph {
     /// Create from empty element
     pub fn from_empty(start: &BytesStart) -> Result<Self> {
         let mut para = Paragraph::default();
-
         for attr in start.attributes().filter_map(|a| a.ok()) {
             let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
             let value = String::from_utf8_lossy(&attr.value).to_string();
             para.unknown_attrs.push((key, value));
         }
-
         Ok(para)
     }
 
@@ -202,9 +177,7 @@ impl Paragraph {
         let mut result = String::new();
         for content in &self.content {
             match content {
-                ParagraphContent::Run(run) => {
-                    result.push_str(&run.text());
-                }
+                ParagraphContent::Run(run) => result.push_str(&run.text()),
                 ParagraphContent::Hyperlink(link) => {
                     for run in &link.runs {
                         result.push_str(&run.text());
@@ -232,7 +205,7 @@ impl Paragraph {
         })
     }
 
-    /// Check if this is a heading (has outline level or heading style)
+    /// Check if this is a heading
     pub fn is_heading(&self) -> bool {
         if let Some(ref props) = self.properties {
             if props.outline_level.is_some() {
@@ -249,16 +222,12 @@ impl Paragraph {
     pub fn numbering(&self) -> Option<NumberingInfo> {
         let props = self.properties.as_ref()?;
         let num_id = props.num_id?;
-        let level = props.num_level.unwrap_or(0);
-        Some(NumberingInfo::new(num_id, level))
+        Some(NumberingInfo::new(num_id, props.num_level.unwrap_or(0)))
     }
 
     /// Check if this paragraph is a list item
     pub fn is_list_item(&self) -> bool {
-        self.properties
-            .as_ref()
-            .and_then(|p| p.num_id)
-            .is_some()
+        self.properties.as_ref().and_then(|p| p.num_id).is_some()
     }
 
     /// Get the list level (0-8) if this is a list item
@@ -271,7 +240,7 @@ impl Paragraph {
         }
     }
 
-    /// Set numbering for this paragraph (makes it a list item)
+    /// Set numbering for this paragraph
     pub fn set_numbering(&mut self, num_id: u32, level: u32) {
         let props = self.properties.get_or_insert_with(Default::default);
         props.num_id = Some(num_id);
@@ -293,7 +262,6 @@ impl Paragraph {
             start.push_attribute((key.as_str(), value.as_str()));
         }
 
-        // Check if paragraph is completely empty
         let is_empty = self.properties.is_none()
             && self.content.is_empty()
             && self.unknown_children.is_empty();
@@ -302,22 +270,15 @@ impl Paragraph {
             writer.write_event(Event::Empty(start))?;
         } else {
             writer.write_event(Event::Start(start))?;
-
-            // Write properties
             if let Some(props) = &self.properties {
                 props.write_to(writer)?;
             }
-
-            // Write content
             for content in &self.content {
                 content.write_to(writer)?;
             }
-
-            // Write unknown children
             for child in &self.unknown_children {
                 child.write_to(writer)?;
             }
-
             writer.write_event(Event::End(BytesEnd::new("w:p")))?;
         }
 
@@ -340,6 +301,113 @@ impl Paragraph {
     /// Set style
     pub fn set_style(&mut self, style: impl Into<String>) {
         self.properties.get_or_insert_with(Default::default).style = Some(style.into());
+    }
+
+    /// Get alignment
+    pub fn alignment(&self) -> Option<Alignment> {
+        self.properties
+            .as_ref()?
+            .justification
+            .as_deref()
+            .and_then(Alignment::from_ooxml)
+    }
+
+    /// Set alignment
+    pub fn set_alignment(&mut self, alignment: Alignment) {
+        self.properties
+            .get_or_insert_with(Default::default)
+            .justification = Some(alignment.as_ooxml().to_string());
+    }
+
+    /// Set indentation
+    pub fn set_indentation(&mut self, indentation: Indentation) {
+        self.properties
+            .get_or_insert_with(Default::default)
+            .indentation = Some(indentation);
+    }
+
+    /// Set line spacing
+    pub fn set_spacing(&mut self, spacing: LineSpacing) {
+        self.properties.get_or_insert_with(Default::default).spacing = Some(spacing);
+    }
+
+    /// Set keep with next
+    pub fn set_keep_next(&mut self, keep: bool) {
+        self.properties
+            .get_or_insert_with(Default::default)
+            .keep_next = Some(keep);
+    }
+
+    /// Set page break before
+    pub fn set_page_break_before(&mut self, page_break: bool) {
+        self.properties
+            .get_or_insert_with(Default::default)
+            .page_break_before = Some(page_break);
+    }
+
+    /// Get mutable runs
+    pub fn runs_mut(&mut self) -> impl Iterator<Item = &mut Run> {
+        self.content.iter_mut().filter_map(|c| {
+            if let ParagraphContent::Run(r) = c {
+                Some(r)
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Clear all content
+    pub fn clear(&mut self) {
+        self.content.clear();
+    }
+
+    /// Set text (replaces all content with a single run)
+    pub fn set_text(&mut self, text: impl Into<String>) {
+        self.content.clear();
+        self.content.push(ParagraphContent::Run(Run::new(text)));
+    }
+
+    /// Check if paragraph is empty
+    pub fn is_empty(&self) -> bool {
+        self.content.is_empty()
+    }
+
+    /// Get heading level (1-9) or None
+    pub fn heading_level(&self) -> Option<u8> {
+        if let Some(ref props) = self.properties {
+            if let Some(level) = props.outline_level {
+                return Some(level + 1);
+            }
+            if let Some(ref style) = props.style {
+                if let Some(suffix) = style.strip_prefix("Heading") {
+                    return suffix.parse().ok();
+                }
+            }
+        }
+        None
+    }
+
+    /// Get run count
+    pub fn run_count(&self) -> usize {
+        self.content
+            .iter()
+            .filter(|c| matches!(c, ParagraphContent::Run(_)))
+            .count()
+    }
+
+    /// Remove a run by index
+    pub fn remove_run(&mut self, index: usize) -> bool {
+        let mut run_idx = 0;
+        for i in 0..self.content.len() {
+            if matches!(self.content[i], ParagraphContent::Run(_)) {
+                if run_idx == index {
+                    self.content.remove(i);
+                    return true;
+                }
+                run_idx += 1;
+            }
+        }
+        false
     }
 }
 
@@ -367,141 +435,6 @@ impl ParagraphContent {
     }
 }
 
-impl ParagraphProperties {
-    /// Parse from reader (after w:pPr start tag)
-    pub fn from_reader<R: BufRead>(reader: &mut Reader<R>) -> Result<Self> {
-        let mut props = ParagraphProperties::default();
-        let mut buf = Vec::new();
-
-        loop {
-            match reader.read_event_into(&mut buf)? {
-                Event::Start(e) => {
-                    let name = e.name();
-                    let local = name.local_name();
-
-                    match local.as_ref() {
-                        b"numPr" => {
-                            // Parse numbering properties
-                            parse_num_pr(reader, &mut props)?;
-                        }
-                        _ => {
-                            // Unknown - preserve
-                            let raw = RawXmlElement::from_reader(reader, &e)?;
-                            props.unknown_children.push(RawXmlNode::Element(raw));
-                        }
-                    }
-                }
-                Event::Empty(e) => {
-                    let name = e.name();
-                    let local = name.local_name();
-
-                    match local.as_ref() {
-                        b"pStyle" => {
-                            props.style = get_w_val(&e);
-                        }
-                        b"jc" => {
-                            props.justification = get_w_val(&e);
-                        }
-                        b"outlineLvl" => {
-                            props.outline_level = get_w_val(&e).and_then(|v| v.parse().ok());
-                        }
-                        _ => {
-                            // Unknown - preserve
-                            let raw = RawXmlElement {
-                                name: String::from_utf8_lossy(e.name().as_ref()).to_string(),
-                                attributes: e
-                                    .attributes()
-                                    .filter_map(|a| a.ok())
-                                    .map(|a| {
-                                        (
-                                            String::from_utf8_lossy(a.key.as_ref()).to_string(),
-                                            String::from_utf8_lossy(&a.value).to_string(),
-                                        )
-                                    })
-                                    .collect(),
-                                children: Vec::new(),
-                                self_closing: true,
-                            };
-                            props.unknown_children.push(RawXmlNode::Element(raw));
-                        }
-                    }
-                }
-                Event::End(e) => {
-                    if e.name().local_name().as_ref() == b"pPr" {
-                        break;
-                    }
-                }
-                Event::Eof => break,
-                _ => {}
-            }
-            buf.clear();
-        }
-
-        Ok(props)
-    }
-
-    /// Write to XML writer
-    pub fn write_to<W: std::io::Write>(&self, writer: &mut Writer<W>) -> Result<()> {
-        // Check if there are any properties to write
-        let has_content = self.style.is_some()
-            || self.justification.is_some()
-            || self.num_id.is_some()
-            || self.outline_level.is_some()
-            || !self.unknown_children.is_empty();
-
-        if !has_content {
-            return Ok(());
-        }
-
-        writer.write_event(Event::Start(BytesStart::new("w:pPr")))?;
-
-        // Style
-        if let Some(style) = &self.style {
-            let mut elem = BytesStart::new("w:pStyle");
-            elem.push_attribute(("w:val", style.as_str()));
-            writer.write_event(Event::Empty(elem))?;
-        }
-
-        // Numbering
-        if self.num_id.is_some() || self.num_level.is_some() {
-            writer.write_event(Event::Start(BytesStart::new("w:numPr")))?;
-            if let Some(level) = self.num_level {
-                let mut elem = BytesStart::new("w:ilvl");
-                elem.push_attribute(("w:val", level.to_string().as_str()));
-                writer.write_event(Event::Empty(elem))?;
-            }
-            if let Some(num_id) = self.num_id {
-                let mut elem = BytesStart::new("w:numId");
-                elem.push_attribute(("w:val", num_id.to_string().as_str()));
-                writer.write_event(Event::Empty(elem))?;
-            }
-            writer.write_event(Event::End(BytesEnd::new("w:numPr")))?;
-        }
-
-        // Justification
-        if let Some(jc) = &self.justification {
-            let mut elem = BytesStart::new("w:jc");
-            elem.push_attribute(("w:val", jc.as_str()));
-            writer.write_event(Event::Empty(elem))?;
-        }
-
-        // Outline level
-        if let Some(level) = self.outline_level {
-            let mut elem = BytesStart::new("w:outlineLvl");
-            elem.push_attribute(("w:val", level.to_string().as_str()));
-            writer.write_event(Event::Empty(elem))?;
-        }
-
-        // Unknown children
-        for child in &self.unknown_children {
-            child.write_to(writer)?;
-        }
-
-        writer.write_event(Event::End(BytesEnd::new("w:pPr")))?;
-        Ok(())
-    }
-}
-
 impl Hyperlink {
     /// Parse from reader
     pub fn from_reader<R: BufRead>(reader: &mut Reader<R>, start: &BytesStart) -> Result<Self> {
@@ -513,29 +446,21 @@ impl Hyperlink {
         };
 
         let mut buf = Vec::new();
-
         loop {
             match reader.read_event_into(&mut buf)? {
                 Event::Start(e) => {
                     if e.name().local_name().as_ref() == b"r" {
-                        let run = Run::from_reader(reader, &e)?;
-                        link.runs.push(run);
+                        link.runs.push(Run::from_reader(reader, &e)?);
                     } else {
-                        // Skip unknown
                         skip_to_end(reader, &e)?;
                     }
                 }
                 Event::Empty(e) => {
                     if e.name().local_name().as_ref() == b"r" {
-                        let run = Run::from_empty(&e)?;
-                        link.runs.push(run);
+                        link.runs.push(Run::from_empty(&e)?);
                     }
                 }
-                Event::End(e) => {
-                    if e.name().local_name().as_ref() == b"hyperlink" {
-                        break;
-                    }
-                }
+                Event::End(e) if e.name().local_name().as_ref() == b"hyperlink" => break,
                 Event::Eof => break,
                 _ => {}
             }
@@ -567,38 +492,6 @@ impl Hyperlink {
 
         Ok(())
     }
-}
-
-/// Parse numbering properties
-fn parse_num_pr<R: BufRead>(reader: &mut Reader<R>, props: &mut ParagraphProperties) -> Result<()> {
-    let mut buf = Vec::new();
-
-    loop {
-        match reader.read_event_into(&mut buf)? {
-            Event::Empty(e) => {
-                let local = e.name().local_name();
-                match local.as_ref() {
-                    b"numId" => {
-                        props.num_id = get_w_val(&e).and_then(|v| v.parse().ok());
-                    }
-                    b"ilvl" => {
-                        props.num_level = get_w_val(&e).and_then(|v| v.parse().ok());
-                    }
-                    _ => {}
-                }
-            }
-            Event::End(e) => {
-                if e.name().local_name().as_ref() == b"numPr" {
-                    break;
-                }
-            }
-            Event::Eof => break,
-            _ => {}
-        }
-        buf.clear();
-    }
-
-    Ok(())
 }
 
 /// Skip to end of current element

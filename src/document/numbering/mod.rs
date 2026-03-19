@@ -390,7 +390,10 @@ mod tests {
 
         assert_eq!(num_id, 0);
         assert!(!numbering.is_bullet_list(num_id));
-        assert_eq!(numbering.get_format(num_id, 0), Some(&NumberFormat::Decimal));
+        assert_eq!(
+            numbering.get_format(num_id, 0),
+            Some(&NumberFormat::Decimal)
+        );
     }
 
     #[test]

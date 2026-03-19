@@ -3,13 +3,25 @@
 mod body;
 mod numbering;
 mod paragraph;
+mod properties;
 mod run;
+mod section;
+mod styles;
 mod table;
 
 pub use body::{BlockContent, Body};
 pub use numbering::{AbstractNum, Level, LevelOverride, Num, NumberFormat, Numbering};
-pub use paragraph::{Hyperlink, Paragraph, ParagraphContent, ParagraphProperties};
+pub use paragraph::{
+    Alignment, Hyperlink, Indentation, LineSpacing, Paragraph, ParagraphContent,
+    ParagraphProperties,
+};
+pub use properties::CoreProperties;
 pub use run::{BreakType, Run, RunContent, RunProperties};
+pub use section::{
+    Columns, HeaderFooterRef, HeaderFooterType, PageMargin, PageOrientation, PageSize,
+    SectionProperties,
+};
+pub use styles::{DocDefaults, Style, StyleType, Styles};
 pub use table::{
     GridColumn, Table, TableAlignment, TableBuilder, TableCell, TableCellProperties, TableRow,
     TableWidth, VMerge, VerticalAlignment,
@@ -32,6 +44,10 @@ pub struct Document {
     body: Body,
     /// Numbering definitions (from numbering.xml)
     numbering: Option<Numbering>,
+    /// Style definitions (from styles.xml)
+    styles: Option<Styles>,
+    /// Core properties (from core.xml)
+    core_properties: Option<CoreProperties>,
 }
 
 impl Document {
@@ -61,10 +77,18 @@ impl Document {
         // Try to load numbering.xml
         let numbering = Self::load_numbering(&package);
 
+        // Try to load styles.xml
+        let styles = Self::load_styles(&package);
+
+        // Try to load core properties
+        let core_properties = Self::load_core_properties(&package);
+
         Ok(Self {
             package,
             body,
             numbering,
+            styles,
+            core_properties,
         })
     }
 
@@ -91,12 +115,48 @@ impl Document {
         Numbering::from_xml(xml).ok()
     }
 
+    /// Load styles from the package
+    fn load_styles(package: &Package) -> Option<Styles> {
+        let doc_part = package.main_document_part()?;
+        let rels = doc_part.relationships()?;
+        let styles_rel = rels.by_type(crate::opc::rel_types::STYLES)?;
+
+        let target = &styles_rel.target;
+        let styles_uri = if target.starts_with('/') {
+            PartUri::new(target).ok()?
+        } else {
+            PartUri::new(&format!("/word/{}", target)).ok()?
+        };
+
+        let styles_part = package.part(&styles_uri)?;
+        let xml_str = styles_part.data_as_str().ok()?;
+        Styles::from_xml(xml_str).ok()
+    }
+
+    /// Load core properties from the package
+    fn load_core_properties(package: &Package) -> Option<CoreProperties> {
+        let rel = package
+            .relationships()
+            .by_type(crate::opc::rel_types::CORE_PROPERTIES)?;
+        let target = &rel.target;
+        let uri = if target.starts_with('/') {
+            PartUri::new(target).ok()?
+        } else {
+            PartUri::new(&format!("/{}", target)).ok()?
+        };
+        let part = package.part(&uri)?;
+        let xml_str = part.data_as_str().ok()?;
+        CoreProperties::from_xml(xml_str).ok()
+    }
+
     /// Create a new empty document
     pub fn new() -> Self {
         Self {
             package: Package::new(),
             body: Body::default(),
             numbering: None,
+            styles: None,
+            core_properties: None,
         }
     }
 
@@ -142,6 +202,30 @@ impl Document {
                 numbering_xml.into_bytes(),
             );
             self.package.add_part(numbering_part);
+        }
+
+        // Update styles.xml if present
+        if let Some(ref styles) = self.styles {
+            let styles_xml = styles.to_xml()?;
+            let styles_uri = PartUri::new("/word/styles.xml")?;
+            let styles_part = Part::new(
+                styles_uri,
+                crate::opc::STYLES.to_string(),
+                styles_xml.into_bytes(),
+            );
+            self.package.add_part(styles_part);
+        }
+
+        // Update core.xml if present
+        if let Some(ref core_props) = self.core_properties {
+            let core_xml = core_props.to_xml()?;
+            let core_uri = PartUri::new("/docProps/core.xml")?;
+            let core_part = Part::new(
+                core_uri,
+                crate::opc::CORE_PROPERTIES.to_string(),
+                core_xml.into_bytes(),
+            );
+            self.package.add_part(core_part);
         }
 
         Ok(())
@@ -215,7 +299,7 @@ impl Document {
             .rev()
             .find_map(|c| {
                 if let BlockContent::Paragraph(p) = c {
-                    Some(p)
+                    Some(p.as_mut())
                 } else {
                     None
                 }
@@ -232,7 +316,7 @@ impl Document {
             .rev()
             .find_map(|c| {
                 if let BlockContent::Paragraph(p) = c {
-                    Some(p)
+                    Some(p.as_mut())
                 } else {
                     None
                 }
@@ -294,7 +378,7 @@ impl Document {
             .rev()
             .find_map(|c| {
                 if let BlockContent::Table(t) = c {
-                    Some(t)
+                    Some(t.as_mut())
                 } else {
                     None
                 }
@@ -307,6 +391,44 @@ impl Document {
         self.add_table(Table::new(rows, cols))
     }
 
+    /// Get styles
+    pub fn styles(&self) -> Option<&Styles> {
+        self.styles.as_ref()
+    }
+
+    /// Get mutable styles
+    pub fn styles_mut(&mut self) -> &mut Styles {
+        self.styles.get_or_insert_with(Styles::default)
+    }
+
+    /// Get a style by ID
+    pub fn style(&self, style_id: &str) -> Option<&Style> {
+        self.styles.as_ref()?.get(style_id)
+    }
+
+    /// Get core properties
+    pub fn core_properties(&self) -> Option<&CoreProperties> {
+        self.core_properties.as_ref()
+    }
+
+    /// Get mutable core properties (creates default if None)
+    pub fn core_properties_mut(&mut self) -> &mut CoreProperties {
+        self.core_properties
+            .get_or_insert_with(CoreProperties::default)
+    }
+
+    /// Get section properties from body
+    pub fn section_properties(&self) -> Option<&SectionProperties> {
+        self.body.section_properties.as_ref()
+    }
+
+    /// Get mutable section properties (creates default if None)
+    pub fn section_properties_mut(&mut self) -> &mut SectionProperties {
+        self.body
+            .section_properties
+            .get_or_insert_with(SectionProperties::default)
+    }
+
     /// Get mutable table by index
     pub fn table_mut(&mut self, index: usize) -> Option<&mut Table> {
         self.body
@@ -314,13 +436,138 @@ impl Document {
             .iter_mut()
             .filter_map(|c| {
                 if let BlockContent::Table(t) = c {
-                    Some(t)
+                    Some(t.as_mut())
                 } else {
                     None
                 }
             })
             .nth(index)
     }
+
+    /// Get mutable paragraph by index
+    pub fn paragraph_mut(&mut self, index: usize) -> Option<&mut Paragraph> {
+        self.body
+            .content
+            .iter_mut()
+            .filter_map(|c| {
+                if let BlockContent::Paragraph(p) = c {
+                    Some(p.as_mut())
+                } else {
+                    None
+                }
+            })
+            .nth(index)
+    }
+
+    /// Get mutable paragraphs iterator
+    pub fn paragraphs_mut(&mut self) -> impl Iterator<Item = &mut Paragraph> {
+        self.body.paragraphs_mut()
+    }
+
+    /// Insert a paragraph at a specific index in the body content
+    pub fn insert_paragraph(&mut self, index: usize, para: Paragraph) {
+        // Find the position in body.content corresponding to the nth paragraph
+        let mut para_count = 0;
+        for i in 0..self.body.content.len() {
+            if matches!(self.body.content[i], BlockContent::Paragraph(_)) {
+                if para_count == index {
+                    self.body
+                        .content
+                        .insert(i, BlockContent::Paragraph(Box::new(para)));
+                    return;
+                }
+                para_count += 1;
+            }
+        }
+        // If index >= paragraph_count, append
+        self.body
+            .content
+            .push(BlockContent::Paragraph(Box::new(para)));
+    }
+
+    /// Remove a paragraph by index
+    pub fn remove_paragraph(&mut self, index: usize) -> bool {
+        let mut para_count = 0;
+        for i in 0..self.body.content.len() {
+            if matches!(self.body.content[i], BlockContent::Paragraph(_)) {
+                if para_count == index {
+                    self.body.content.remove(i);
+                    return true;
+                }
+                para_count += 1;
+            }
+        }
+        false
+    }
+
+    /// Remove a table by index
+    pub fn remove_table(&mut self, index: usize) -> bool {
+        let mut table_count = 0;
+        for i in 0..self.body.content.len() {
+            if matches!(self.body.content[i], BlockContent::Table(_)) {
+                if table_count == index {
+                    self.body.content.remove(i);
+                    return true;
+                }
+                table_count += 1;
+            }
+        }
+        false
+    }
+
+    /// Replace text across all paragraphs. Returns number of replacements.
+    pub fn replace_text(&mut self, find: &str, replace: &str) -> usize {
+        let mut count = 0;
+        for content in &mut self.body.content {
+            if let BlockContent::Paragraph(para) = content {
+                count += replace_text_in_paragraph(para, find, replace);
+            }
+        }
+        count
+    }
+
+    /// Find text locations across all paragraphs
+    pub fn find_text(&self, needle: &str) -> Vec<TextLocation> {
+        let mut results = Vec::new();
+        for (para_idx, para) in self.body.paragraphs().enumerate() {
+            let text = para.text();
+            let mut start = 0;
+            while let Some(pos) = text[start..].find(needle) {
+                results.push(TextLocation {
+                    paragraph_index: para_idx,
+                    char_offset: start + pos,
+                });
+                start += pos + needle.len();
+            }
+        }
+        results
+    }
+}
+
+/// Text location in the document
+#[derive(Clone, Debug)]
+pub struct TextLocation {
+    pub paragraph_index: usize,
+    pub char_offset: usize,
+}
+
+/// Replace text in a paragraph's runs
+fn replace_text_in_paragraph(para: &mut Paragraph, find: &str, replace: &str) -> usize {
+    let mut count = 0;
+    for content in &mut para.content {
+        if let ParagraphContent::Run(run) = content {
+            for rc in &mut run.content {
+                if let RunContent::Text(ref mut text) = rc {
+                    let matches = text.matches(find).count();
+                    if matches > 0 {
+                        *text = text.replace(find, replace);
+                        count += matches;
+                    }
+                }
+            }
+        }
+    }
+    count
 }
 
 impl Default for Document {

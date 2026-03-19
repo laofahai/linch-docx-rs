@@ -84,8 +84,7 @@ impl AbstractNum {
         for attr in start.attributes().filter_map(|a| a.ok()) {
             let key = attr.key.as_ref();
             if key == b"w:abstractNumId" || key == b"abstractNumId" {
-                abs_num.abstract_num_id =
-                    String::from_utf8_lossy(&attr.value).parse().unwrap_or(0);
+                abs_num.abstract_num_id = String::from_utf8_lossy(&attr.value).parse().unwrap_or(0);
             }
         }
 

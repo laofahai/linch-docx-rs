@@ -182,6 +182,7 @@ pub const NUMBERING: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml";
 pub const STYLES: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml";
+pub const CORE_PROPERTIES: &str = "application/vnd.openxmlformats-package.core-properties+xml";
 
 #[cfg(test)]
 mod tests {

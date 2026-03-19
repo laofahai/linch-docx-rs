@@ -61,8 +61,7 @@ impl Num {
                 Event::Empty(e) => {
                     let local = e.name().local_name();
                     if local.as_ref() == b"abstractNumId" {
-                        abstract_num_id =
-                            get_w_val(&e).and_then(|v| v.parse().ok()).unwrap_or(0);
+                        abstract_num_id = get_w_val(&e).and_then(|v| v.parse().ok()).unwrap_or(0);
                     }
                 }
                 Event::End(e) => {

@@ -315,6 +315,107 @@ impl Run {
     pub fn set_color(&mut self, color: impl Into<String>) {
         self.properties.get_or_insert_with(Default::default).color = Some(color.into());
     }
+
+    /// Set underline
+    pub fn set_underline(&mut self, underline: impl Into<String>) {
+        self.properties
+            .get_or_insert_with(Default::default)
+            .underline = Some(underline.into());
+    }
+
+    /// Remove underline
+    pub fn clear_underline(&mut self) {
+        if let Some(ref mut props) = self.properties {
+            props.underline = None;
+        }
+    }
+
+    /// Set strike-through
+    pub fn set_strike(&mut self, strike: bool) {
+        self.properties.get_or_insert_with(Default::default).strike = Some(strike);
+    }
+
+    /// Set highlight color
+    pub fn set_highlight(&mut self, color: impl Into<String>) {
+        self.properties
+            .get_or_insert_with(Default::default)
+            .highlight = Some(color.into());
+    }
+
+    /// Set font (ASCII)
+    pub fn set_font(&mut self, font: impl Into<String>) {
+        self.properties
+            .get_or_insert_with(Default::default)
+            .font_ascii = Some(font.into());
+    }
+
+    /// Set east asian font
+    pub fn set_font_east_asia(&mut self, font: impl Into<String>) {
+        self.properties
+            .get_or_insert_with(Default::default)
+            .font_east_asia = Some(font.into());
+    }
+
+    /// Set superscript
+    pub fn set_superscript(&mut self) {
+        self.properties
+            .get_or_insert_with(Default::default)
+            .vertical_align = Some("superscript".into());
+    }
+
+    /// Set subscript
+    pub fn set_subscript(&mut self) {
+        self.properties
+            .get_or_insert_with(Default::default)
+            .vertical_align = Some("subscript".into());
+    }
+
+    /// Set style
+    pub fn set_style(&mut self, style: impl Into<String>) {
+        self.properties.get_or_insert_with(Default::default).style = Some(style.into());
+    }
+
+    /// Clear all formatting
+    pub fn clear_formatting(&mut self) {
+        self.properties = None;
+    }
+
+    /// Get font
+    pub fn font(&self) -> Option<&str> {
+        self.properties.as_ref()?.font_ascii.as_deref()
+    }
+
+    /// Get font east asia
+    pub fn font_east_asia(&self) -> Option<&str> {
+        self.properties.as_ref()?.font_east_asia.as_deref()
+    }
+
+    /// Get highlight color
+    pub fn highlight(&self) -> Option<&str> {
+        self.properties.as_ref()?.highlight.as_deref()
+    }
+
+    /// Check if superscript
+    pub fn is_superscript(&self) -> bool {
+        self.properties
+            .as_ref()
+            .and_then(|p| p.vertical_align.as_deref())
+            == Some("superscript")
+    }
+
+    /// Check if subscript
+    pub fn is_subscript(&self) -> bool {
+        self.properties
+            .as_ref()
+            .and_then(|p| p.vertical_align.as_deref())
+            == Some("subscript")
+    }
+
+    /// Set the text content (replaces all content)
+    pub fn set_text(&mut self, text: impl Into<String>) {
+        self.content.clear();
+        self.content.push(RunContent::Text(text.into()));
+    }
 }
 
 impl RunContent {

@@ -1,6 +1,6 @@
 //! Document body and block-level content
 
-use crate::document::{Paragraph, Table};
+use crate::document::{Paragraph, SectionProperties, Table};
 use crate::error::Result;
 use crate::xml::RawXmlNode;
 use quick_xml::events::{BytesEnd, BytesStart, Event};
@@ -11,9 +11,9 @@ use std::io::BufRead;
 #[derive(Clone, Debug)]
 pub enum BlockContent {
     /// Paragraph
-    Paragraph(Paragraph),
+    Paragraph(Box<Paragraph>),
     /// Table
-    Table(Table),
+    Table(Box<Table>),
     /// Unknown element (preserved for round-trip)
     Unknown(RawXmlNode),
 }
@@ -24,7 +24,7 @@ pub struct Body {
     /// Block-level content
     pub content: Vec<BlockContent>,
     /// Section properties (last sectPr in body)
-    pub section_properties: Option<RawXmlNode>,
+    pub section_properties: Option<SectionProperties>,
 }
 
 impl Body {
@@ -42,16 +42,15 @@ impl Body {
                     match local.as_ref() {
                         b"p" => {
                             let para = Paragraph::from_reader(reader, &e)?;
-                            body.content.push(BlockContent::Paragraph(para));
+                            body.content.push(BlockContent::Paragraph(Box::new(para)));
                         }
                         b"tbl" => {
                             let table = Table::from_reader(reader, &e)?;
-                            body.content.push(BlockContent::Table(table));
+                            body.content.push(BlockContent::Table(Box::new(table)));
                         }
                         b"sectPr" => {
-                            // Section properties - preserve raw
-                            let raw = crate::xml::RawXmlElement::from_reader(reader, &e)?;
-                            body.section_properties = Some(RawXmlNode::Element(raw));
+                            body.section_properties =
+                                Some(SectionProperties::from_reader(reader, &e)?);
                         }
                         _ => {
                             // Unknown element - preserve for round-trip
@@ -69,7 +68,7 @@ impl Body {
                         b"p" => {
                             // Empty paragraph
                             let para = Paragraph::from_empty(&e)?;
-                            body.content.push(BlockContent::Paragraph(para));
+                            body.content.push(BlockContent::Paragraph(Box::new(para)));
                         }
                         _ => {
                             // Preserve unknown empty elements
@@ -111,7 +110,7 @@ impl Body {
     pub fn paragraphs(&self) -> impl Iterator<Item = &Paragraph> {
         self.content.iter().filter_map(|c| {
             if let BlockContent::Paragraph(p) = c {
-                Some(p)
+                Some(p.as_ref())
             } else {
                 None
             }
@@ -122,7 +121,7 @@ impl Body {
     pub fn paragraphs_mut(&mut self) -> impl Iterator<Item = &mut Paragraph> {
         self.content.iter_mut().filter_map(|c| {
             if let BlockContent::Paragraph(p) = c {
-                Some(p)
+                Some(p.as_mut())
             } else {
                 None
             }
@@ -133,7 +132,7 @@ impl Body {
     pub fn tables(&self) -> impl Iterator<Item = &Table> {
         self.content.iter().filter_map(|c| {
             if let BlockContent::Table(t) = c {
-                Some(t)
+                Some(t.as_ref())
             } else {
                 None
             }
@@ -160,12 +159,12 @@ impl Body {
 
     /// Add a paragraph
     pub fn add_paragraph(&mut self, para: Paragraph) {
-        self.content.push(BlockContent::Paragraph(para));
+        self.content.push(BlockContent::Paragraph(Box::new(para)));
     }
 
     /// Add a table
     pub fn add_table(&mut self, table: Table) {
-        self.content.push(BlockContent::Table(table));
+        self.content.push(BlockContent::Table(Box::new(table)));
     }
 }
 
