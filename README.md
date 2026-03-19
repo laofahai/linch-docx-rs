@@ -20,7 +20,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-linch-docx-rs = "0.0.1-alpha.3"
+linch-docx-rs = "0.1"
 ```
 
 ### Reading a Document
