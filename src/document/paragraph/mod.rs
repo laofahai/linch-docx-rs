@@ -395,6 +395,36 @@ impl Paragraph {
             .count()
     }
 
+    /// Add a hyperlink with a relationship ID (for external links)
+    pub fn add_hyperlink(&mut self, r_id: impl Into<String>, text: impl Into<String>) {
+        let link = Hyperlink {
+            r_id: Some(r_id.into()),
+            anchor: None,
+            runs: vec![Run::new(text)],
+        };
+        self.content.push(ParagraphContent::Hyperlink(link));
+    }
+
+    /// Add an internal hyperlink (bookmark anchor)
+    pub fn add_internal_link(&mut self, anchor: impl Into<String>, text: impl Into<String>) {
+        let link = Hyperlink {
+            r_id: None,
+            anchor: Some(anchor.into()),
+            runs: vec![Run::new(text)],
+        };
+        self.content.push(ParagraphContent::Hyperlink(link));
+    }
+
+    /// Add a bookmark
+    pub fn add_bookmark(&mut self, id: impl Into<String>, name: impl Into<String>) {
+        let id = id.into();
+        self.content.push(ParagraphContent::BookmarkStart {
+            id: id.clone(),
+            name: name.into(),
+        });
+        self.content.push(ParagraphContent::BookmarkEnd { id });
+    }
+
     /// Remove a run by index
     pub fn remove_run(&mut self, index: usize) -> bool {
         let mut run_idx = 0;

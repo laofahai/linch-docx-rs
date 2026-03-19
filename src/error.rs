@@ -43,6 +43,15 @@ pub enum Error {
 
     #[error("Part not found: {0}")]
     PartNotFound(String),
+
+    #[error("Index out of bounds: {index} (max: {max})")]
+    IndexOutOfBounds { index: usize, max: usize },
+
+    #[error("Unsupported feature: {0}")]
+    Unsupported(String),
+
+    #[error("Element not found: {0}")]
+    NotFound(String),
 }
 
 /// Result type alias
