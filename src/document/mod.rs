@@ -3,6 +3,7 @@
 mod body;
 mod footnotes;
 mod header_footer;
+mod image;
 mod numbering;
 mod paragraph;
 mod properties;
@@ -10,11 +11,14 @@ mod run;
 mod section;
 mod styles;
 mod table;
+mod template;
+mod text_ops;
 mod xml_ops;
 
 pub use body::{BlockContent, Body};
 pub use footnotes::{Note, Notes};
 pub use header_footer::HeaderFooter;
+pub use image::{ImageData, InlineImage};
 pub use numbering::{AbstractNum, Level, LevelOverride, Num, NumberFormat, Numbering};
 pub use paragraph::{
     Alignment, Hyperlink, Indentation, LineSpacing, Paragraph, ParagraphContent,
@@ -31,6 +35,8 @@ pub use table::{
     GridColumn, Table, TableAlignment, TableBuilder, TableCell, TableCellProperties, TableRow,
     TableWidth, VMerge, VerticalAlignment,
 };
+pub use template::TemplateContext;
+pub use text_ops::TextLocation;
 
 use crate::error::{Error, Result};
 use crate::opc::{Package, Part, PartUri};
@@ -675,17 +681,6 @@ impl Document {
         false
     }
 
-    /// Replace text across all paragraphs. Returns number of replacements.
-    pub fn replace_text(&mut self, find: &str, replace: &str) -> usize {
-        let mut count = 0;
-        for content in &mut self.body.content {
-            if let BlockContent::Paragraph(para) = content {
-                count += replace_text_in_paragraph(para, find, replace);
-            }
-        }
-        count
-    }
-
     /// Get all headers
     pub fn headers(&self) -> &[(String, HeaderFooter)] {
         &self.headers
@@ -742,48 +737,49 @@ impl Document {
         })
     }
 
-    /// Find text locations across all paragraphs
-    pub fn find_text(&self, needle: &str) -> Vec<TextLocation> {
-        let mut results = Vec::new();
-        for (para_idx, para) in self.body.paragraphs().enumerate() {
-            let text = para.text();
-            let mut start = 0;
-            while let Some(pos) = text[start..].find(needle) {
-                results.push(TextLocation {
-                    paragraph_index: para_idx,
-                    char_offset: start + pos,
-                });
-                start += pos + needle.len();
-            }
-        }
-        results
-    }
-}
+    /// Add an image to the document package and return its relationship ID.
+    ///
+    /// The returned `r_id` can be used with `InlineImage::new(r_id, w, h)` to
+    /// create a drawing element, which can then be added to a Run.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use linch_docx_rs::{Document, ImageData, InlineImage, Run, RunContent};
+    ///
+    /// let mut doc = Document::new();
+    /// let img_data = ImageData::from_file("photo.png".as_ref())?;
+    /// let r_id = doc.add_image(img_data);
+    /// let image = InlineImage::from_cm(&r_id, 5.0, 3.0);
+    ///
+    /// let p = doc.add_empty_paragraph();
+    /// let mut run = Run::new("");
+    /// run.add_image(image);
+    /// p.add_run(run);
+    /// ```
+    pub fn add_image(&mut self, image: ImageData) -> String {
+        use crate::opc::rel_types;
 
-/// Text location in the document
-#[derive(Clone, Debug)]
-pub struct TextLocation {
-    pub paragraph_index: usize,
-    pub char_offset: usize,
-}
+        // Count existing images to generate unique filename
+        let img_count = self
+            .package
+            .part_uris()
+            .filter(|u| u.as_str().contains("/word/media/"))
+            .count();
+        let filename = format!("image{}.{}", img_count + 1, image.extension);
+        let part_path = format!("/word/media/{}", filename);
 
-/// Replace text in a paragraph's runs
-fn replace_text_in_paragraph(para: &mut Paragraph, find: &str, replace: &str) -> usize {
-    let mut count = 0;
-    for content in &mut para.content {
-        if let ParagraphContent::Run(run) = content {
-            for rc in &mut run.content {
-                if let RunContent::Text(ref mut text) = rc {
-                    let matches = text.matches(find).count();
-                    if matches > 0 {
-                        *text = text.replace(find, replace);
-                        count += matches;
-                    }
-                }
-            }
-        }
+        // Add image part
+        let uri = PartUri::new(&part_path).expect("valid image URI");
+        let part = Part::new(uri, image.content_type, image.data);
+        self.package.add_part(part);
+
+        // Add relationship from document part
+        let doc_uri = PartUri::new("/word/document.xml").expect("valid doc URI");
+        let doc_part = self.package.part_mut(&doc_uri).expect("doc part exists");
+        let rels = doc_part.ensure_relationships();
+        let rel_target = format!("media/{}", filename);
+        rels.add(rel_types::IMAGE, &rel_target)
     }
-    count
 }
 
 impl Default for Document {

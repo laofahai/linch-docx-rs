@@ -1,5 +1,6 @@
 //! Run element (w:r) - a contiguous run of text with uniform formatting
 
+use crate::document::image::InlineImage;
 use crate::error::Result;
 use crate::xml::{get_w_val, parse_bool, RawXmlElement, RawXmlNode};
 use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
@@ -34,6 +35,8 @@ pub enum RunContent {
     SoftHyphen,
     /// Non-breaking hyphen
     NoBreakHyphen,
+    /// Drawing (inline image)
+    Drawing(InlineImage),
     /// Unknown (preserved)
     Unknown(RawXmlNode),
 }
@@ -416,6 +419,11 @@ impl Run {
         self.content.clear();
         self.content.push(RunContent::Text(text.into()));
     }
+
+    /// Add an inline image to this run
+    pub fn add_image(&mut self, image: InlineImage) {
+        self.content.push(RunContent::Drawing(image));
+    }
 }
 
 impl RunContent {
@@ -452,6 +460,9 @@ impl RunContent {
             }
             RunContent::NoBreakHyphen => {
                 writer.write_event(Event::Empty(BytesStart::new("w:noBreakHyphen")))?;
+            }
+            RunContent::Drawing(img) => {
+                img.to_drawing_xml(writer)?;
             }
             RunContent::Unknown(node) => {
                 node.write_to(writer)?;
