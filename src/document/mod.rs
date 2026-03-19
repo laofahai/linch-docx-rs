@@ -277,98 +277,115 @@ impl Document {
 
     /// Update the package with current body content
     fn update_package(&mut self) -> Result<()> {
-        let xml = serialize_document_xml(&self.body)?;
-        let uri = PartUri::new("/word/document.xml")?;
+        use crate::opc::rel_types;
 
-        // Update or add the document part
-        let part = Part::new(
-            uri.clone(),
+        let doc_uri = PartUri::new("/word/document.xml")?;
+
+        // 1. Write document.xml
+        let xml = serialize_document_xml(&self.body)?;
+        self.package.add_part(Part::new(
+            doc_uri.clone(),
             crate::opc::MAIN_DOCUMENT.to_string(),
             xml.into_bytes(),
-        );
-        self.package.add_part(part);
+        ));
 
-        // Ensure the relationship exists for the main document
-        if self.package.main_document_part().is_none() {
-            use crate::opc::rel_types;
+        // Ensure package-level relationship for document
+        if self
+            .package
+            .relationships()
+            .by_type(rel_types::OFFICE_DOCUMENT)
+            .is_none()
+        {
             self.package
-                .add_relationship(rel_types::OFFICE_DOCUMENT, uri.as_str());
+                .add_relationship(rel_types::OFFICE_DOCUMENT, doc_uri.as_str());
         }
 
-        // Update numbering.xml if present
+        // Ensure package-level relationship for core properties
+        if self.core_properties.is_some()
+            && self
+                .package
+                .relationships()
+                .by_type(rel_types::CORE_PROPERTIES)
+                .is_none()
+        {
+            self.package
+                .add_relationship(rel_types::CORE_PROPERTIES, "docProps/core.xml");
+        }
+
+        // 2. Ensure document-level relationships
+        {
+            let doc_part = self.package.part_mut(&doc_uri).unwrap();
+            let rels = doc_part.ensure_relationships();
+
+            if self.numbering.is_some() && rels.by_type(rel_types::NUMBERING).is_none() {
+                rels.add(rel_types::NUMBERING, "numbering.xml");
+            }
+            if self.styles.is_some() && rels.by_type(rel_types::STYLES).is_none() {
+                rels.add(rel_types::STYLES, "styles.xml");
+            }
+            if self.footnotes.is_some() && rels.by_type(rel_types::FOOTNOTES).is_none() {
+                rels.add(rel_types::FOOTNOTES, "footnotes.xml");
+            }
+            if self.endnotes.is_some() && rels.by_type(rel_types::ENDNOTES).is_none() {
+                rels.add(rel_types::ENDNOTES, "endnotes.xml");
+            }
+        }
+
+        // 3. Write all part data
         if let Some(ref numbering) = self.numbering {
-            let numbering_xml = numbering.to_xml()?;
-            let numbering_uri = PartUri::new("/word/numbering.xml")?;
-            let numbering_part = Part::new(
-                numbering_uri,
-                crate::opc::NUMBERING.to_string(),
-                numbering_xml.into_bytes(),
-            );
-            self.package.add_part(numbering_part);
+            self.package.add_part(Part::new(
+                PartUri::new("/word/numbering.xml")?,
+                crate::opc::NUMBERING,
+                numbering.to_xml()?.into_bytes(),
+            ));
         }
 
-        // Update styles.xml if present
         if let Some(ref styles) = self.styles {
-            let styles_xml = styles.to_xml()?;
-            let styles_uri = PartUri::new("/word/styles.xml")?;
-            let styles_part = Part::new(
-                styles_uri,
-                crate::opc::STYLES.to_string(),
-                styles_xml.into_bytes(),
-            );
-            self.package.add_part(styles_part);
+            self.package.add_part(Part::new(
+                PartUri::new("/word/styles.xml")?,
+                crate::opc::STYLES,
+                styles.to_xml()?.into_bytes(),
+            ));
         }
 
-        // Update core.xml if present
         if let Some(ref core_props) = self.core_properties {
-            let core_xml = core_props.to_xml()?;
-            let core_uri = PartUri::new("/docProps/core.xml")?;
-            let core_part = Part::new(
-                core_uri,
-                crate::opc::CORE_PROPERTIES.to_string(),
-                core_xml.into_bytes(),
-            );
-            self.package.add_part(core_part);
+            self.package.add_part(Part::new(
+                PartUri::new("/docProps/core.xml")?,
+                crate::opc::CORE_PROPERTIES,
+                core_props.to_xml()?.into_bytes(),
+            ));
         }
 
-        // Update headers
-        for (r_id, hf) in &self.headers {
-            let hf_xml = hf.to_xml()?;
-            let hf_uri = PartUri::new(&format!("/word/header_{}.xml", r_id))?;
-            let hf_part = Part::new(hf_uri, crate::opc::HEADER.to_string(), hf_xml.into_bytes());
-            self.package.add_part(hf_part);
-        }
-
-        // Update footnotes
         if let Some(ref fn_notes) = self.footnotes {
-            let fn_xml = fn_notes.to_xml()?;
-            let fn_uri = PartUri::new("/word/footnotes.xml")?;
-            let fn_part = Part::new(
-                fn_uri,
-                crate::opc::FOOTNOTES.to_string(),
-                fn_xml.into_bytes(),
-            );
-            self.package.add_part(fn_part);
+            self.package.add_part(Part::new(
+                PartUri::new("/word/footnotes.xml")?,
+                crate::opc::FOOTNOTES,
+                fn_notes.to_xml()?.into_bytes(),
+            ));
         }
 
-        // Update endnotes
         if let Some(ref en_notes) = self.endnotes {
-            let en_xml = en_notes.to_xml()?;
-            let en_uri = PartUri::new("/word/endnotes.xml")?;
-            let en_part = Part::new(
-                en_uri,
-                crate::opc::ENDNOTES.to_string(),
-                en_xml.into_bytes(),
-            );
-            self.package.add_part(en_part);
+            self.package.add_part(Part::new(
+                PartUri::new("/word/endnotes.xml")?,
+                crate::opc::ENDNOTES,
+                en_notes.to_xml()?.into_bytes(),
+            ));
         }
 
-        // Update footers
+        for (r_id, hf) in &self.headers {
+            self.package.add_part(Part::new(
+                PartUri::new(&format!("/word/header_{}.xml", r_id))?,
+                crate::opc::HEADER,
+                hf.to_xml()?.into_bytes(),
+            ));
+        }
+
         for (r_id, hf) in &self.footers {
-            let hf_xml = hf.to_xml()?;
-            let hf_uri = PartUri::new(&format!("/word/footer_{}.xml", r_id))?;
-            let hf_part = Part::new(hf_uri, crate::opc::FOOTER.to_string(), hf_xml.into_bytes());
-            self.package.add_part(hf_part);
+            self.package.add_part(Part::new(
+                PartUri::new(&format!("/word/footer_{}.xml", r_id))?,
+                crate::opc::FOOTER,
+                hf.to_xml()?.into_bytes(),
+            ));
         }
 
         Ok(())
